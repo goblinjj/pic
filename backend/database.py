@@ -34,6 +34,7 @@ def init_db():
             external_link TEXT DEFAULT '',
             wire TEXT DEFAULT '',
             status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'completed')),
+            deleted_at DATETIME DEFAULT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (category_id) REFERENCES categories(id)
@@ -52,4 +53,6 @@ def init_db():
     cols = [row[1] for row in conn.execute("PRAGMA table_info(logs)").fetchall()]
     if "wire" not in cols:
         conn.execute("ALTER TABLE logs ADD COLUMN wire TEXT DEFAULT ''")
+    if "deleted_at" not in cols:
+        conn.execute("ALTER TABLE logs ADD COLUMN deleted_at DATETIME DEFAULT NULL")
     conn.close()

@@ -5,7 +5,7 @@ import os
 from typing import Optional
 from database import get_db
 from models import LogOut, LogListOut, LogUpdate, StatusUpdate, ImageOut
-from thumbnail import generate_thumbnail, delete_thumbnail
+from thumbnail import generate_thumbnail
 
 router = APIRouter(prefix="/api/logs", tags=["logs"])
 
@@ -35,7 +35,7 @@ def list_logs(
     size: int = 20,
     db: sqlite3.Connection = Depends(get_db),
 ):
-    where, params = [], []
+    where, params = ["l.deleted_at IS NULL"], []
     if search:
         where.append("l.description LIKE ?")
         params.append(f"%{search}%")
@@ -46,7 +46,7 @@ def list_logs(
         where.append("l.status = ?")
         params.append(status)
 
-    where_clause = (" WHERE " + " AND ".join(where)) if where else ""
+    where_clause = " WHERE " + " AND ".join(where)
 
     total = db.execute(
         f"SELECT COUNT(*) as c FROM logs l{where_clause}", params
@@ -112,7 +112,7 @@ async def create_log(
 @router.get("/{log_id}", response_model=LogOut)
 def get_log(log_id: int, db: sqlite3.Connection = Depends(get_db)):
     row = db.execute(
-        "SELECT id, category_id, description, external_link, wire, status, created_at, updated_at FROM logs WHERE id = ?",
+        "SELECT id, category_id, description, external_link, wire, status, created_at, updated_at FROM logs WHERE id = ? AND deleted_at IS NULL",
         (log_id,),
     ).fetchone()
     if not row:
@@ -126,7 +126,7 @@ def update_log(
     body: LogUpdate,
     db: sqlite3.Connection = Depends(get_db),
 ):
-    existing = db.execute("SELECT id FROM logs WHERE id = ?", (log_id,)).fetchone()
+    existing = db.execute("SELECT id FROM logs WHERE id = ? AND deleted_at IS NULL", (log_id,)).fetchone()
     if not existing:
         raise HTTPException(404, "Log not found")
 
@@ -166,7 +166,7 @@ def toggle_status(
 ):
     if body.status not in ("pending", "completed"):
         raise HTTPException(400, "Invalid status")
-    existing = db.execute("SELECT id FROM logs WHERE id = ?", (log_id,)).fetchone()
+    existing = db.execute("SELECT id FROM logs WHERE id = ? AND deleted_at IS NULL", (log_id,)).fetchone()
     if not existing:
         raise HTTPException(404, "Log not found")
     db.execute(
@@ -183,16 +183,10 @@ def toggle_status(
 
 @router.delete("/{log_id}", status_code=204)
 def delete_log(log_id: int, db: sqlite3.Connection = Depends(get_db)):
-    existing = db.execute("SELECT id FROM logs WHERE id = ?", (log_id,)).fetchone()
+    existing = db.execute("SELECT id FROM logs WHERE id = ? AND deleted_at IS NULL", (log_id,)).fetchone()
     if not existing:
         raise HTTPException(404, "Log not found")
-    imgs = db.execute(
-        "SELECT filename FROM images WHERE log_id = ?", (log_id,)
-    ).fetchall()
-    for img in imgs:
-        path = os.path.join(UPLOAD_DIR, img["filename"])
-        if os.path.exists(path):
-            os.remove(path)
-        delete_thumbnail(img["filename"])
-    db.execute("DELETE FROM logs WHERE id = ?", (log_id,))
+    db.execute(
+        "UPDATE logs SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?", (log_id,)
+    )
     db.commit()
