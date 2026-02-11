@@ -90,21 +90,20 @@
         :to="`/logs/${log.id}`"
         class="block rounded-2xl border border-slate-100 bg-white p-4 shadow-sm transition-shadow hover:shadow-md"
       >
-        <!-- Image strip -->
-        <div v-if="log.images.length" class="mb-3 flex gap-1.5 overflow-hidden rounded-xl">
+        <!-- Cover image -->
+        <div v-if="log.images.length" class="relative mb-3 overflow-hidden rounded-xl bg-slate-50">
           <img
-            v-for="img in log.images.slice(0, 3)"
-            :key="img.id"
-            :src="`/uploads/thumbs/${img.filename}`"
-            :alt="img.original_name"
-            class="h-20 flex-1 rounded-lg bg-slate-50 object-contain"
+            :src="`/uploads/thumbs/${log.images[0].filename}`"
+            :alt="log.images[0].original_name"
+            class="w-full rounded-xl object-cover"
+            style="max-height: 240px"
           />
-          <div
-            v-if="log.images.length > 3"
-            class="flex h-20 w-14 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-medium text-slate-500"
+          <span
+            v-if="log.images.length > 1"
+            class="absolute right-2 top-2 rounded-full bg-black/50 px-2 py-0.5 text-xs font-medium text-white"
           >
-            +{{ log.images.length - 3 }}
-          </div>
+            {{ log.images.length }}张
+          </span>
         </div>
 
         <!-- Tags row -->
