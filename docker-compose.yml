@@ -1,0 +1,13 @@
+services:
+  piclog:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - /volume2/homes/darlingz/pic/uploads:/app/uploads
+      - /volume2/homes/darlingz/pic/data:/app/data
+    restart: unless-stopped
+    environment:
+      - DB_PATH=/app/data/piclog.db
+      - UPLOAD_DIR=/app/uploads
+      - STATIC_DIR=/app/static
