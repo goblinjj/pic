@@ -5,6 +5,7 @@ import os
 from typing import Optional
 from database import get_db
 from models import LogOut, LogListOut, LogUpdate, StatusUpdate, ImageOut
+from thumbnail import generate_thumbnail, delete_thumbnail
 
 router = APIRouter(prefix="/api/logs", tags=["logs"])
 
@@ -93,6 +94,7 @@ async def create_log(
         content = await f.read()
         with open(path, "wb") as out:
             out.write(content)
+        generate_thumbnail(stored_name)
         db.execute(
             "INSERT INTO images (log_id, filename, original_name) VALUES (?, ?, ?)",
             (log_id, stored_name, f.filename),
@@ -187,5 +189,6 @@ def delete_log(log_id: int, db: sqlite3.Connection = Depends(get_db)):
         path = os.path.join(UPLOAD_DIR, img["filename"])
         if os.path.exists(path):
             os.remove(path)
+        delete_thumbnail(img["filename"])
     db.execute("DELETE FROM logs WHERE id = ?", (log_id,))
     db.commit()

@@ -95,9 +95,9 @@
           <img
             v-for="img in log.images.slice(0, 3)"
             :key="img.id"
-            :src="`/uploads/${img.filename}`"
+            :src="`/uploads/thumbs/${img.filename}`"
             :alt="img.original_name"
-            class="h-20 flex-1 rounded-lg object-cover"
+            class="h-20 flex-1 rounded-lg bg-slate-50 object-contain"
           />
           <div
             v-if="log.images.length > 3"

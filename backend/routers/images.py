@@ -4,6 +4,7 @@ import uuid
 import os
 from database import get_db
 from models import ImageOut
+from thumbnail import generate_thumbnail, delete_thumbnail
 
 router = APIRouter(tags=["images"])
 
@@ -31,6 +32,7 @@ async def upload_images(
         content = await f.read()
         with open(path, "wb") as out:
             out.write(content)
+        generate_thumbnail(stored_name)
         cur = db.execute(
             "INSERT INTO images (log_id, filename, original_name) VALUES (?, ?, ?)",
             (log_id, stored_name, f.filename),
@@ -61,5 +63,6 @@ def delete_image(image_id: int, db: sqlite3.Connection = Depends(get_db)):
     path = os.path.join(UPLOAD_DIR, row["filename"])
     if os.path.exists(path):
         os.remove(path)
+    delete_thumbnail(row["filename"])
     db.execute("DELETE FROM images WHERE id = ?", (image_id,))
     db.commit()

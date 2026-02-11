@@ -4,6 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from database import init_db
 from routers import categories, logs, images
+from thumbnail import migrate_existing
 
 UPLOAD_DIR = os.environ.get("UPLOAD_DIR", "/app/uploads")
 STATIC_DIR = os.environ.get("STATIC_DIR", "/app/static")
@@ -22,6 +23,7 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 @app.on_event("startup")
 def startup():
     init_db()
+    migrate_existing()
 
 
 if os.path.isdir(STATIC_DIR):
