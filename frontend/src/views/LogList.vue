@@ -1,56 +1,158 @@
 <template>
   <div>
-    <div class="flex items-center justify-between mb-16">
-      <h1>日志列表</h1>
-      <router-link to="/logs/new" class="btn-primary" style="padding:8px 16px;border-radius:var(--radius);color:#fff;font-size:14px">+ 新建</router-link>
+    <!-- Search bar -->
+    <div class="relative mb-4">
+      <svg class="absolute left-3 top-1/2 h-4.5 w-4.5 -translate-y-1/2 text-slate-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+      </svg>
+      <input
+        type="text"
+        v-model="search"
+        @input="debouncedLoad"
+        placeholder="搜索日志..."
+        class="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 transition-colors focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+      />
     </div>
 
-    <div class="card filters">
-      <div class="filter-row">
-        <input type="text" v-model="search" placeholder="搜索描述..." @input="debouncedLoad" />
-        <select v-model="filterCategory" @change="load">
-          <option value="">全部分类</option>
-          <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</option>
-        </select>
-        <select v-model="filterStatus" @change="load">
-          <option value="">全部状态</option>
-          <option value="pending">待处理</option>
-          <option value="completed">已完成</option>
-        </select>
-      </div>
+    <!-- Filter pills -->
+    <div class="mb-4 flex gap-2 overflow-x-auto hide-scrollbar pb-1">
+      <!-- Category pills -->
+      <button
+        @click="filterCategory = ''; page = 1; load()"
+        class="shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors"
+        :class="filterCategory === '' ? 'bg-primary-600 text-white shadow-sm' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'"
+      >
+        全部
+      </button>
+      <button
+        v-for="c in categories"
+        :key="c.id"
+        @click="filterCategory = c.id; page = 1; load()"
+        class="shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors"
+        :class="filterCategory === c.id ? 'bg-primary-600 text-white shadow-sm' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'"
+      >
+        {{ c.name }}
+      </button>
+
+      <span class="mx-0.5 w-px self-stretch bg-slate-200"></span>
+
+      <!-- Status pills -->
+      <button
+        @click="filterStatus = ''; page = 1; load()"
+        class="shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors"
+        :class="filterStatus === '' ? 'bg-slate-900 text-white shadow-sm' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'"
+      >
+        全部状态
+      </button>
+      <button
+        @click="filterStatus = 'pending'; page = 1; load()"
+        class="shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors"
+        :class="filterStatus === 'pending' ? 'bg-amber-500 text-white shadow-sm' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'"
+      >
+        待处理
+      </button>
+      <button
+        @click="filterStatus = 'completed'; page = 1; load()"
+        class="shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors"
+        :class="filterStatus === 'completed' ? 'bg-emerald-500 text-white shadow-sm' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'"
+      >
+        已完成
+      </button>
     </div>
 
-    <div v-if="loading" class="card" style="text-align:center;color:var(--gray-500)">加载中...</div>
+    <!-- Loading -->
+    <div v-if="loading" class="flex items-center justify-center py-16 text-sm text-slate-400">
+      <svg class="mr-2 h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+      </svg>
+      加载中...
+    </div>
 
-    <div v-else-if="logs.length === 0" class="card" style="text-align:center;color:var(--gray-500)">暂无日志</div>
+    <!-- Empty state -->
+    <EmptyState v-else-if="logs.length === 0" message="暂无日志">
+      <router-link
+        to="/logs/new"
+        class="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary-700"
+      >
+        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+        </svg>
+        新建日志
+      </router-link>
+    </EmptyState>
 
-    <div v-else>
-      <div class="card log-card" v-for="log in logs" :key="log.id">
-        <div class="log-header">
-          <router-link :to="`/logs/${log.id}`" class="log-title">
-            #{{ log.id }}
-            <span class="log-category">{{ log.category_name }}</span>
-          </router-link>
-          <span class="badge" :class="log.status === 'completed' ? 'badge-completed' : 'badge-pending'">
-            {{ log.status === 'completed' ? '已完成' : '待处理' }}
+    <!-- Log cards -->
+    <div v-else class="space-y-3">
+      <router-link
+        v-for="log in logs"
+        :key="log.id"
+        :to="`/logs/${log.id}`"
+        class="block rounded-2xl border border-slate-100 bg-white p-4 shadow-sm transition-shadow hover:shadow-md"
+      >
+        <!-- Image strip -->
+        <div v-if="log.images.length" class="mb-3 flex gap-1.5 overflow-hidden rounded-xl">
+          <img
+            v-for="img in log.images.slice(0, 3)"
+            :key="img.id"
+            :src="`/uploads/${img.filename}`"
+            :alt="img.original_name"
+            class="h-20 flex-1 rounded-lg object-cover"
+          />
+          <div
+            v-if="log.images.length > 3"
+            class="flex h-20 w-14 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-medium text-slate-500"
+          >
+            +{{ log.images.length - 3 }}
+          </div>
+        </div>
+
+        <!-- Tags row -->
+        <div class="mb-2 flex items-center gap-2">
+          <span class="inline-flex items-center rounded-md bg-primary-50 px-2 py-0.5 text-xs font-medium text-primary-600">
+            {{ log.category_name }}
+          </span>
+          <StatusBadge :status="log.status" />
+        </div>
+
+        <!-- Description -->
+        <p v-if="log.description" class="mb-2 line-clamp-2 text-sm text-slate-700">
+          {{ log.description }}
+        </p>
+
+        <!-- Date -->
+        <div class="flex items-center gap-3 text-xs text-slate-400">
+          <span>{{ formatDate(log.created_at) }}</span>
+          <span v-if="log.external_link" class="flex items-center gap-0.5">
+            <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+            </svg>
+            链接
           </span>
         </div>
-        <p v-if="log.description" class="log-desc">{{ log.description }}</p>
-        <div class="log-thumbs" v-if="log.images.length">
-          <img v-for="img in log.images.slice(0, 4)" :key="img.id"
-               :src="`/uploads/${img.filename}`" :alt="img.original_name" />
-          <span v-if="log.images.length > 4" class="more-count">+{{ log.images.length - 4 }}</span>
-        </div>
-        <div class="log-meta">
-          <span>{{ formatDate(log.created_at) }}</span>
-          <a v-if="log.external_link" :href="log.external_link" target="_blank" rel="noopener">外部链接</a>
-        </div>
-      </div>
+      </router-link>
 
-      <div class="pagination" v-if="totalPages > 1">
-        <button class="btn-outline btn-sm" :disabled="page <= 1" @click="page--; load()">上一页</button>
-        <span>{{ page }} / {{ totalPages }}</span>
-        <button class="btn-outline btn-sm" :disabled="page >= totalPages" @click="page++; load()">下一页</button>
+      <!-- Pagination -->
+      <div v-if="totalPages > 1" class="flex items-center justify-center gap-4 pt-2">
+        <button
+          :disabled="page <= 1"
+          @click="page--; load()"
+          class="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white"
+        >
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+          </svg>
+        </button>
+        <span class="text-sm font-medium text-slate-500">{{ page }} / {{ totalPages }}</span>
+        <button
+          :disabled="page >= totalPages"
+          @click="page++; load()"
+          class="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white"
+        >
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+          </svg>
+        </button>
       </div>
     </div>
   </div>
@@ -59,6 +161,8 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { api } from '../api.js'
+import StatusBadge from '../components/StatusBadge.vue'
+import EmptyState from '../components/EmptyState.vue'
 
 const logs = ref([])
 const categories = ref([])
@@ -107,60 +211,3 @@ onMounted(async () => {
   load()
 })
 </script>
-
-<style scoped>
-h1 { font-size: 24px; font-weight: 700; }
-.filter-row {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-.filter-row input, .filter-row select { width: auto; flex: 1; min-width: 140px; }
-.log-card { cursor: default; }
-.log-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.log-title { font-weight: 600; font-size: 16px; }
-.log-title:hover { text-decoration: none; }
-.log-category {
-  font-weight: 400;
-  font-size: 13px;
-  color: var(--gray-500);
-  margin-left: 8px;
-}
-.log-desc {
-  font-size: 14px;
-  color: var(--gray-700);
-  margin-bottom: 8px;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.log-thumbs {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 8px;
-  align-items: center;
-}
-.log-thumbs img {
-  width: 64px;
-  height: 64px;
-  object-fit: cover;
-  border-radius: 6px;
-  border: 1px solid var(--gray-200);
-}
-.more-count { font-size: 13px; color: var(--gray-500); }
-.log-meta {
-  display: flex;
-  gap: 16px;
-  font-size: 12px;
-  color: var(--gray-500);
-}
-.pagination {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  margin-top: 16px;
-  font-size: 14px;
-}
-</style>

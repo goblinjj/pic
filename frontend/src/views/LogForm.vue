@@ -1,31 +1,73 @@
 <template>
   <div>
-    <h1 class="mb-16">{{ isEdit ? '编辑日志' : '新建日志' }}</h1>
-    <form class="card" @submit.prevent="submit">
-      <div class="form-group">
-        <label>分类 *</label>
-        <select v-model="form.category_id" required>
+    <PageHeader :title="isEdit ? '编辑日志' : '新建日志'" back />
+
+    <form
+      @submit.prevent="submit"
+      class="space-y-5 rounded-2xl border border-slate-100 bg-white p-5 shadow-sm"
+    >
+      <!-- Category -->
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-slate-700">分类</label>
+        <select
+          v-model="form.category_id"
+          required
+          class="w-full appearance-none rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 shadow-sm transition-colors focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+        >
           <option value="" disabled>请选择分类</option>
           <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</option>
         </select>
       </div>
-      <div class="form-group">
-        <label>描述</label>
-        <textarea v-model="form.description" rows="3" placeholder="日志描述（可选）"></textarea>
+
+      <!-- Description -->
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-slate-700">描述</label>
+        <textarea
+          v-model="form.description"
+          rows="3"
+          placeholder="日志描述（可选）"
+          class="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 transition-colors focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+        ></textarea>
       </div>
-      <div class="form-group">
-        <label>外部链接</label>
-        <input type="url" v-model="form.external_link" placeholder="https://..." />
+
+      <!-- External link -->
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-slate-700">外部链接</label>
+        <div class="relative">
+          <svg class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
+          </svg>
+          <input
+            type="url"
+            v-model="form.external_link"
+            placeholder="https://..."
+            class="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-3.5 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 transition-colors focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+          />
+        </div>
       </div>
-      <div class="form-group" v-if="!isEdit">
-        <label>上传图片</label>
+
+      <!-- Image upload (only for new logs) -->
+      <div v-if="!isEdit">
+        <label class="mb-1.5 block text-sm font-medium text-slate-700">图片</label>
         <ImageUploader v-model="files" />
       </div>
-      <div class="flex gap-8">
-        <button type="submit" class="btn-primary" :disabled="submitting">
-          {{ submitting ? '提交中...' : (isEdit ? '保存' : '创建') }}
+
+      <!-- Actions -->
+      <div class="pt-2">
+        <button
+          type="submit"
+          :disabled="submitting"
+          class="w-full rounded-xl bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-700 disabled:opacity-50"
+        >
+          {{ submitting ? '提交中...' : (isEdit ? '保存修改' : '创建日志') }}
         </button>
-        <button type="button" class="btn-outline" @click="$router.back()">取消</button>
+        <button
+          type="button"
+          @click="$router.back()"
+          class="mt-2 w-full py-2 text-sm font-medium text-slate-500 transition-colors hover:text-slate-700"
+        >
+          取消
+        </button>
       </div>
     </form>
   </div>
@@ -36,6 +78,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api.js'
 import ImageUploader from '../components/ImageUploader.vue'
+import PageHeader from '../components/PageHeader.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -89,7 +132,3 @@ async function submit() {
   }
 }
 </script>
-
-<style scoped>
-h1 { font-size: 24px; font-weight: 700; }
-</style>
