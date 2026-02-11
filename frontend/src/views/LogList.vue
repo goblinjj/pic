@@ -90,15 +90,19 @@
         :to="`/logs/${log.id}`"
         class="block rounded-2xl border border-slate-100 bg-white p-4 shadow-sm transition-shadow hover:shadow-md"
       >
-        <!-- Cover image -->
-        <div v-if="log.images.length" class="relative mb-3 overflow-hidden rounded-xl bg-slate-50">
+        <!-- Images -->
+        <div v-if="log.images.length" class="relative mb-3 grid grid-cols-2 gap-1.5">
           <img
-            :src="`/uploads/thumbs/${log.images[0].filename}`"
-            :alt="log.images[0].original_name"
-            class="w-full rounded-xl"
+            v-for="img in log.images.slice(0, 4)"
+            :key="img.id"
+            :src="`/uploads/thumbs/${img.filename}`"
+            :alt="img.original_name"
+            class="w-full rounded-xl bg-slate-50"
+            :class="imgOrient[img.id] === 'portrait' ? '' : 'col-span-2'"
+            @load="onImgLoad($event, img.id)"
           />
           <span
-            v-if="log.images.length > 1"
+            v-if="log.images.length > 4"
             class="absolute right-2 top-2 rounded-full bg-black/50 px-2 py-0.5 text-xs font-medium text-white"
           >
             {{ log.images.length }}张
@@ -164,6 +168,7 @@ import EmptyState from '../components/EmptyState.vue'
 
 const logs = ref([])
 const categories = ref([])
+const imgOrient = ref({})
 const search = ref('')
 const filterCategory = ref('')
 const filterStatus = ref('')
@@ -197,6 +202,11 @@ async function load() {
   } finally {
     loading.value = false
   }
+}
+
+function onImgLoad(e, imgId) {
+  const { naturalWidth, naturalHeight } = e.target
+  imgOrient.value[imgId] = naturalHeight > naturalWidth ? 'portrait' : 'landscape'
 }
 
 function formatDate(dt) {
