@@ -101,6 +101,12 @@
         </a>
       </div>
 
+      <!-- Wire -->
+      <div v-if="log.wire" class="px-5 py-3.5">
+        <p class="mb-0.5 text-xs font-medium text-slate-400">线材</p>
+        <p class="text-sm text-slate-700">{{ log.wire }}</p>
+      </div>
+
       <!-- Timestamps -->
       <div class="flex gap-8 px-5 py-3.5">
         <div>

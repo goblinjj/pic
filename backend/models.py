@@ -23,6 +23,7 @@ class LogUpdate(BaseModel):
     category_id: Optional[int] = None
     description: Optional[str] = None
     external_link: Optional[str] = None
+    wire: Optional[str] = None
 
 
 class StatusUpdate(BaseModel):
@@ -43,6 +44,7 @@ class LogOut(BaseModel):
     category_name: str = ""
     description: str
     external_link: str
+    wire: str = ""
     status: str
     created_at: str
     updated_at: str

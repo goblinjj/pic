@@ -46,6 +46,17 @@
         </div>
       </div>
 
+      <!-- Wire -->
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-slate-700">线材</label>
+        <input
+          type="text"
+          v-model="form.wire"
+          placeholder="线材信息（可选）"
+          class="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 transition-colors focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+        />
+      </div>
+
       <!-- Image upload (only for new logs) -->
       <div v-if="!isEdit">
         <label class="mb-1.5 block text-sm font-medium text-slate-700">图片</label>
@@ -91,6 +102,7 @@ const form = ref({
   category_id: '',
   description: '',
   external_link: '',
+  wire: '',
 })
 
 onMounted(async () => {
@@ -100,6 +112,7 @@ onMounted(async () => {
     form.value.category_id = log.category_id
     form.value.description = log.description
     form.value.external_link = log.external_link
+    form.value.wire = log.wire || ''
   }
 })
 
@@ -112,6 +125,7 @@ async function submit() {
         category_id: form.value.category_id,
         description: form.value.description,
         external_link: form.value.external_link,
+        wire: form.value.wire,
       })
       router.push(`/logs/${route.params.id}`)
     } else {
@@ -119,6 +133,7 @@ async function submit() {
       fd.append('category_id', form.value.category_id)
       fd.append('description', form.value.description)
       fd.append('external_link', form.value.external_link)
+      fd.append('wire', form.value.wire)
       for (const f of files.value) {
         fd.append('files', f)
       }

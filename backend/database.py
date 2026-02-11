@@ -32,6 +32,7 @@ def init_db():
             category_id INTEGER NOT NULL,
             description TEXT DEFAULT '',
             external_link TEXT DEFAULT '',
+            wire TEXT DEFAULT '',
             status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'completed')),
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -47,4 +48,8 @@ def init_db():
             FOREIGN KEY (log_id) REFERENCES logs(id) ON DELETE CASCADE
         );
     """)
+    # Migrate: add wire column if not exists
+    cols = [row[1] for row in conn.execute("PRAGMA table_info(logs)").fetchall()]
+    if "wire" not in cols:
+        conn.execute("ALTER TABLE logs ADD COLUMN wire TEXT DEFAULT ''")
     conn.close()

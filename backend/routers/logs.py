@@ -54,7 +54,7 @@ def list_logs(
 
     offset = (page - 1) * size
     rows = db.execute(
-        f"SELECT l.id, l.category_id, l.description, l.external_link, l.status, l.created_at, l.updated_at "
+        f"SELECT l.id, l.category_id, l.description, l.external_link, l.wire, l.status, l.created_at, l.updated_at "
         f"FROM logs l{where_clause} ORDER BY l.created_at DESC LIMIT ? OFFSET ?",
         params + [size, offset],
     ).fetchall()
@@ -68,6 +68,7 @@ async def create_log(
     category_id: int = Form(...),
     description: str = Form(""),
     external_link: str = Form(""),
+    wire: str = Form(""),
     files: list[UploadFile] = File(default=[]),
     db: sqlite3.Connection = Depends(get_db),
 ):
@@ -78,8 +79,8 @@ async def create_log(
         raise HTTPException(400, "Invalid category")
 
     cur = db.execute(
-        "INSERT INTO logs (category_id, description, external_link) VALUES (?, ?, ?)",
-        (category_id, description, external_link),
+        "INSERT INTO logs (category_id, description, external_link, wire) VALUES (?, ?, ?, ?)",
+        (category_id, description, external_link, wire),
     )
     log_id = cur.lastrowid
     db.commit()
@@ -102,7 +103,7 @@ async def create_log(
     db.commit()
 
     row = db.execute(
-        "SELECT id, category_id, description, external_link, status, created_at, updated_at FROM logs WHERE id = ?",
+        "SELECT id, category_id, description, external_link, wire, status, created_at, updated_at FROM logs WHERE id = ?",
         (log_id,),
     ).fetchone()
     return _build_log(db, row)
@@ -111,7 +112,7 @@ async def create_log(
 @router.get("/{log_id}", response_model=LogOut)
 def get_log(log_id: int, db: sqlite3.Connection = Depends(get_db)):
     row = db.execute(
-        "SELECT id, category_id, description, external_link, status, created_at, updated_at FROM logs WHERE id = ?",
+        "SELECT id, category_id, description, external_link, wire, status, created_at, updated_at FROM logs WHERE id = ?",
         (log_id,),
     ).fetchone()
     if not row:
@@ -139,6 +140,9 @@ def update_log(
     if body.external_link is not None:
         updates.append("external_link = ?")
         params.append(body.external_link)
+    if body.wire is not None:
+        updates.append("wire = ?")
+        params.append(body.wire)
     if updates:
         updates.append("updated_at = CURRENT_TIMESTAMP")
         params.append(log_id)
@@ -148,7 +152,7 @@ def update_log(
         db.commit()
 
     row = db.execute(
-        "SELECT id, category_id, description, external_link, status, created_at, updated_at FROM logs WHERE id = ?",
+        "SELECT id, category_id, description, external_link, wire, status, created_at, updated_at FROM logs WHERE id = ?",
         (log_id,),
     ).fetchone()
     return _build_log(db, row)
@@ -171,7 +175,7 @@ def toggle_status(
     )
     db.commit()
     row = db.execute(
-        "SELECT id, category_id, description, external_link, status, created_at, updated_at FROM logs WHERE id = ?",
+        "SELECT id, category_id, description, external_link, wire, status, created_at, updated_at FROM logs WHERE id = ?",
         (log_id,),
     ).fetchone()
     return _build_log(db, row)
