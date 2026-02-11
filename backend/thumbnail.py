@@ -3,8 +3,8 @@ from PIL import Image
 
 UPLOAD_DIR = os.environ.get("UPLOAD_DIR", "/app/uploads")
 THUMB_DIR = os.path.join(UPLOAD_DIR, "thumbs")
-THUMB_SIZE = (400, 400)
-THUMB_QUALITY = 80
+THUMB_SIZE = (800, 800)
+THUMB_QUALITY = 85
 
 
 def ensure_thumb_dir():
