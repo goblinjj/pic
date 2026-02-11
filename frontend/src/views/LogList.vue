@@ -95,8 +95,7 @@
           <img
             :src="`/uploads/thumbs/${log.images[0].filename}`"
             :alt="log.images[0].original_name"
-            class="w-full rounded-xl object-cover"
-            style="max-height: 240px"
+            class="w-full rounded-xl"
           />
           <span
             v-if="log.images.length > 1"
