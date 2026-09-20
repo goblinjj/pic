@@ -64,10 +64,10 @@
       <div class="pt-2">
         <button
           type="submit"
-          :disabled="submitting || fieldsLoading || fieldsError"
+          :disabled="submitting || loadError || fieldsLoading || fieldsError"
           class="w-full rounded-xl bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-700 disabled:opacity-50"
         >
-          {{ submitting ? '提交中...' : (fieldsLoading ? '字段加载中...' : (fieldsError ? '字段加载失败' : (isEdit ? '保存修改' : '创建日志'))) }}
+          {{ submitting ? '提交中...' : (loadError ? '加载失败' : (fieldsLoading ? '字段加载中...' : (fieldsError ? '字段加载失败' : (isEdit ? '保存修改' : '创建日志')))) }}
         </button>
         <button
           type="button"
@@ -106,8 +106,12 @@ const fields = ref([])
 const fieldValues = ref({})
 const fieldsLoading = ref(false)
 const fieldsError = ref(false)
-// 编辑模式下先把已有值暂存在这里，等分类的字段定义拉回来后再套用
-let pendingValues = null
+// 初始加载（分类列表 / 编辑模式下的日志本身）失败：表单内容不可信，禁止提交
+const loadError = ref(false)
+// 编辑模式下把拉到的日志整条留着，每次成功拉到字段定义时按它重新推导回填值。
+// 不能用「一次性消费」的暂存值：字段请求失败后用户换个分类再换回来时就没得填了，
+// 表单会以空值示人，保存时把真实数据全抹掉。
+const loadedLog = ref(null)
 // 请求序号：避免分类快速切换时，旧请求的响应晚于新请求落地，覆盖新分类的状态
 let requestSeq = 0
 
@@ -121,6 +125,11 @@ function buildValueMap(fieldList, existing) {
     map[f.id] = f.id in existing ? existing[f.id] : defaultValue(f)
   }
   return map
+}
+
+// 区分「回到日志自己的原分类」与「用户主动换成别的分类」
+function isOriginalCategory(cid) {
+  return !!loadedLog.value && String(cid) === String(loadedLog.value.category_id)
 }
 
 function valuesFromLog(log) {
@@ -138,7 +147,6 @@ watch(() => form.value.category_id, async (cid) => {
   if (!cid) {
     fields.value = []
     fieldValues.value = {}
-    pendingValues = null
     fieldsLoading.value = false
     return
   }
@@ -148,17 +156,19 @@ watch(() => form.value.category_id, async (cid) => {
     const fetched = await api.getCategoryFields(cid)
     if (seq !== requestSeq) return // 已被更新的分类切换取代，丢弃这次的结果
     fields.value = fetched
-    // 切换分类时清空已填的自定义值，避免跨分类的脏数据
-    fieldValues.value = buildValueMap(fields.value, pendingValues || {})
-    pendingValues = null
+    // 只有当前分类就是这条日志自己的原分类时才回填已保存的值；
+    // 用户主动切到别的分类必须清空已填值，避免跨分类的脏数据。
+    // 每次成功都重新推导，所以「失败 → 换分类 → 换回来」也能拿回原值。
+    const prefill = isOriginalCategory(cid) ? valuesFromLog(loadedLog.value) : {}
+    fieldValues.value = buildValueMap(fields.value, prefill)
     fieldsLoading.value = false
     fieldsError.value = false
   } catch (e) {
     if (seq !== requestSeq) return // 已被取代的请求失败，与当前分类状态无关，忽略
     fields.value = []
     fieldValues.value = {}
-    // 不清空 pendingValues：编辑模式下这是日志已保存字段值的唯一副本，
-    // 留着才能在用户重新选择分类后成功拉取时把值套回去
+    // loadedLog 保持不动：它是日志已保存字段值的唯一副本，
+    // 用户重新选中原分类并成功拉到字段后还要靠它回填
     fieldsLoading.value = false
     fieldsError.value = true
     alert(e.message)
@@ -166,13 +176,20 @@ watch(() => form.value.category_id, async (cid) => {
 })
 
 onMounted(async () => {
-  categories.value = await api.getCategories()
-  if (isEdit.value) {
-    const log = await api.getLog(route.params.id)
-    pendingValues = valuesFromLog(log)
-    form.value.description = log.description
-    form.value.external_link = log.external_link
-    form.value.category_id = log.category_id
+  // 分类列表和日志本身都属于「初始加载」：任何一个失败，表单都是空壳，
+  // 编辑模式下直接保存会把描述、链接和全部自定义字段值抹成空
+  try {
+    categories.value = await api.getCategories()
+    if (isEdit.value) {
+      const log = await api.getLog(route.params.id)
+      loadedLog.value = log
+      form.value.description = log.description
+      form.value.external_link = log.external_link
+      form.value.category_id = log.category_id
+    }
+  } catch (e) {
+    loadError.value = true
+    alert(e.message)
   }
 })
 
@@ -195,6 +212,7 @@ function firstMissingRequired() {
 }
 
 async function submit() {
+  if (loadError.value) return alert('加载失败，请刷新页面后再试')
   if (!form.value.category_id) return alert('请选择分类')
   if (fieldsLoading.value) return alert('字段加载中，请稍候')
   if (fieldsError.value) return alert('分类字段加载失败，请重新选择该分类后再试')
