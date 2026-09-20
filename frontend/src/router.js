@@ -3,6 +3,7 @@ import LogList from './views/LogList.vue'
 import LogForm from './views/LogForm.vue'
 import LogDetail from './views/LogDetail.vue'
 import Categories from './views/Categories.vue'
+import CategoryFields from './views/CategoryFields.vue'
 
 const routes = [
   { path: '/', name: 'LogList', component: LogList },
@@ -10,6 +11,7 @@ const routes = [
   { path: '/logs/:id/edit', name: 'LogEdit', component: LogForm },
   { path: '/logs/:id', name: 'LogDetail', component: LogDetail },
   { path: '/categories', name: 'Categories', component: Categories },
+  { path: '/categories/:id/fields', name: 'CategoryFields', component: CategoryFields },
 ]
 
 export default createRouter({

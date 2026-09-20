@@ -68,9 +68,20 @@
             <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-50 text-xs font-bold text-primary-600">
               {{ c.sort_order }}
             </span>
-            <span class="text-sm font-medium text-slate-900">{{ c.name }}</span>
+            <router-link
+              :to="`/categories/${c.id}/fields`"
+              class="text-sm font-medium text-slate-900 hover:text-primary-600"
+            >
+              {{ c.name }}
+            </router-link>
           </div>
           <div class="flex items-center gap-1">
+            <router-link
+              :to="`/categories/${c.id}/fields`"
+              class="flex h-8 items-center rounded-lg px-2 text-xs font-medium text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            >
+              字段
+            </router-link>
             <button
               @click="startEdit(c)"
               class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
