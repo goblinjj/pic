@@ -56,7 +56,7 @@ def init_db():
     if "deleted_at" not in cols:
         conn.execute("ALTER TABLE logs ADD COLUMN deleted_at DATETIME DEFAULT NULL")
     _init_custom_fields(conn)
-    _migrate_wire_to_field(conn)
+    _run_one_time_migrations(conn)
     conn.commit()
     conn.close()
 
@@ -112,9 +112,33 @@ def _init_custom_fields(conn):
 GLOVE_CATEGORY_NAME = "手套"
 WIRE_FIELD_NAME = "线材"
 
+# 一次性迁移的版本号，记在库自身的 PRAGMA user_version 里。
+# 1 = logs.wire 已迁移成「手套」分类下的「线材」自定义字段。
+SCHEMA_VERSION = 1
+
+
+def _run_one_time_migrations(conn):
+    """按库里记录的版本号跑一次性迁移，跑过的永不重跑。
+
+    关键：判断依据是版本号，不是「数据在不在」。用数据存在与否来判断的话，
+    用户清空线材的值、或干脆删掉线材字段之后，下次启动又会被迁移重新写回来。
+    全新空库没有「手套」分类，迁移是空操作，但一样要打上版本号，
+    否则以后用户手工建了个叫「手套」的分类就会莫名其妙被迁移。
+    """
+    version = conn.execute("PRAGMA user_version").fetchone()[0]
+    if version >= SCHEMA_VERSION:
+        return
+    if version < 1:
+        _migrate_wire_to_field(conn)
+    conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+
 
 def _migrate_wire_to_field(conn):
-    """把 logs.wire 的值迁移为「手套」分类下的「线材」自定义字段值。幂等。"""
+    """把 logs.wire 的值迁移为「手套」分类下的「线材」自定义字段值。
+
+    只由 _run_one_time_migrations 在整个库的生命周期里调用一次。
+    logs.wire 列保留不删。
+    """
     cat = conn.execute(
         "SELECT id FROM categories WHERE name = ?", (GLOVE_CATEGORY_NAME,)
     ).fetchone()
