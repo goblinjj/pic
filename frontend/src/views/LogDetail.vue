@@ -101,10 +101,19 @@
         </a>
       </div>
 
-      <!-- Wire -->
-      <div v-if="log.wire" class="px-5 py-3.5">
-        <p class="mb-0.5 text-xs font-medium text-slate-400">线材</p>
-        <p class="text-sm text-slate-700">{{ log.wire }}</p>
+      <!-- Custom fields -->
+      <div v-for="fv in log.field_values" :key="fv.field_id" class="px-5 py-3.5">
+        <p class="mb-0.5 text-xs font-medium text-slate-400">{{ fv.name }}</p>
+        <div v-if="fv.type === 'select' || fv.type === 'multiselect'" class="flex flex-wrap gap-1.5">
+          <span
+            v-for="label in fv.option_labels"
+            :key="label"
+            class="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700"
+          >
+            {{ label }}
+          </span>
+        </div>
+        <p v-else class="whitespace-pre-wrap text-sm text-slate-700">{{ fv.value }}</p>
       </div>
 
       <!-- Timestamps -->
