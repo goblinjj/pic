@@ -140,6 +140,48 @@ def test_field_usage_counts_logs(client, category, select_field, db_conn):
     assert client.get(f"/api/options/{opt['id']}/usage").json()["log_count"] == 1
 
 
+def test_field_usage_counts_distinct_logs_not_rows(client, category, db_conn):
+    # Create multiselect field with two options
+    multiselect_field = client.post(
+        f"/api/categories/{category['id']}/fields",
+        json={"name": "颜色", "type": "multiselect"},
+    ).json()
+    opt1 = client.post(f"/api/fields/{multiselect_field['id']}/options", json={"label": "红"}).json()
+    opt2 = client.post(f"/api/fields/{multiselect_field['id']}/options", json={"label": "蓝"}).json()
+
+    # Insert one log with both options (two separate log_field_values rows)
+    cur = db_conn.execute(
+        "INSERT INTO logs (category_id, description) VALUES (?, '')", (category["id"],)
+    )
+    log_id_1 = cur.lastrowid
+    db_conn.execute(
+        "INSERT INTO log_field_values (log_id, field_id, option_id) VALUES (?, ?, ?)",
+        (log_id_1, multiselect_field["id"], opt1["id"]),
+    )
+    db_conn.execute(
+        "INSERT INTO log_field_values (log_id, field_id, option_id) VALUES (?, ?, ?)",
+        (log_id_1, multiselect_field["id"], opt2["id"]),
+    )
+    db_conn.commit()
+
+    # With one log having two rows, COUNT(DISTINCT log_id) should still be 1
+    assert client.get(f"/api/fields/{multiselect_field['id']}/usage").json()["log_count"] == 1
+
+    # Add a second log using the same field
+    cur = db_conn.execute(
+        "INSERT INTO logs (category_id, description) VALUES (?, '')", (category["id"],)
+    )
+    log_id_2 = cur.lastrowid
+    db_conn.execute(
+        "INSERT INTO log_field_values (log_id, field_id, option_id) VALUES (?, ?, ?)",
+        (log_id_2, multiselect_field["id"], opt1["id"]),
+    )
+    db_conn.commit()
+
+    # Now with two distinct logs, count should be 2
+    assert client.get(f"/api/fields/{multiselect_field['id']}/usage").json()["log_count"] == 2
+
+
 def test_deleting_field_cascades_to_options_and_values(client, category, select_field, db_conn):
     opt = client.post(f"/api/fields/{select_field['id']}/options", json={"label": "Nike"}).json()
     cur = db_conn.execute(
