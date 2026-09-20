@@ -60,6 +60,43 @@
       </button>
     </div>
 
+    <!-- Custom field filters (only when a single category is selected) -->
+    <div v-if="activeFields.length" class="mb-4 space-y-2">
+      <div
+        v-for="f in optionFields"
+        :key="f.id"
+        class="flex gap-2 overflow-x-auto hide-scrollbar pb-0.5"
+      >
+        <span class="shrink-0 self-center text-[11px] font-medium text-slate-400">{{ f.name }}</span>
+        <button
+          v-for="o in f.options"
+          :key="o.id"
+          @click="toggleOption(f.id, o.id)"
+          class="shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors"
+          :class="isOptionSelected(f.id, o.id)
+            ? 'bg-slate-900 text-white shadow-sm'
+            : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'"
+        >
+          {{ o.label }}
+        </button>
+      </div>
+
+      <div v-if="sortableFields.length" class="flex items-center gap-2">
+        <span class="shrink-0 text-[11px] font-medium text-slate-400">排序</span>
+        <select
+          v-model="sortValue"
+          @change="page = 1; load()"
+          class="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 shadow-sm focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+        >
+          <option value="">最新创建</option>
+          <template v-for="f in sortableFields" :key="f.id">
+            <option :value="`${f.id}:desc`">{{ f.name }} 从高到低</option>
+            <option :value="`${f.id}:asc`">{{ f.name }} 从低到高</option>
+          </template>
+        </select>
+      </div>
+    </div>
+
     <!-- Loading -->
     <div v-if="loading" class="flex items-center justify-center py-16 text-sm text-slate-400">
       <svg class="mr-2 h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
@@ -165,7 +202,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { api } from '../api.js'
 import StatusBadge from '../components/StatusBadge.vue'
 import EmptyState from '../components/EmptyState.vue'
@@ -180,7 +217,56 @@ const size = 20
 const total = ref(0)
 const loading = ref(false)
 
+const activeFields = ref([])
+const selectedOptions = ref({})
+const sortValue = ref('')
+
 const totalPages = computed(() => Math.ceil(total.value / size))
+
+const optionFields = computed(() =>
+  activeFields.value.filter(
+    (f) => (f.type === 'select' || f.type === 'multiselect') && f.options.length > 0
+  )
+)
+const sortableFields = computed(() =>
+  activeFields.value.filter((f) => f.type === 'number' || f.type === 'date')
+)
+
+watch(filterCategory, async (cid) => {
+  // 换分类就把该分类专属的筛选条件全部重置
+  selectedOptions.value = {}
+  sortValue.value = ''
+  activeFields.value = cid ? await api.getCategoryFields(cid) : []
+})
+
+function isOptionSelected(fieldId, optionId) {
+  return (selectedOptions.value[fieldId] || []).includes(optionId)
+}
+
+function toggleOption(fieldId, optionId) {
+  const current = [...(selectedOptions.value[fieldId] || [])]
+  const index = current.indexOf(optionId)
+  if (index === -1) current.push(optionId)
+  else current.splice(index, 1)
+
+  if (current.length === 0) {
+    const next = { ...selectedOptions.value }
+    delete next[fieldId]
+    selectedOptions.value = next
+  } else {
+    selectedOptions.value = { ...selectedOptions.value, [fieldId]: current }
+  }
+  page.value = 1
+  load()
+}
+
+function buildFvParams() {
+  const out = []
+  for (const [fieldId, optionIds] of Object.entries(selectedOptions.value)) {
+    for (const optionId of optionIds) out.push(`${fieldId}:${optionId}`)
+  }
+  return out
+}
 
 let debounceTimer = null
 function debouncedLoad() {
@@ -197,6 +283,8 @@ async function load() {
       status: filterStatus.value || undefined,
       page: page.value,
       size,
+      fv: buildFvParams(),
+      sort: sortValue.value,
     })
     logs.value = data.items
     total.value = data.total
