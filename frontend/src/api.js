@@ -1,11 +1,30 @@
 const BASE = ''
 
+// FastAPI 的 422 校验错误里 detail 是一个数组（每项含 loc/msg），
+// 直接丢给 new Error 会变成 alert("[object Object]")，得摊平成人看得懂的文字
+function formatDetail(detail) {
+  if (typeof detail === 'string') return detail
+  if (Array.isArray(detail)) {
+    const parts = detail.map((item) => {
+      if (typeof item === 'string') return item
+      const loc = Array.isArray(item?.loc)
+        ? item.loc.filter((p) => p !== 'body' && p !== 'query').join('.')
+        : ''
+      const msg = item?.msg || JSON.stringify(item)
+      return loc ? `${loc}: ${msg}` : msg
+    })
+    return parts.join('；')
+  }
+  if (detail && typeof detail === 'object') return JSON.stringify(detail)
+  return ''
+}
+
 async function request(url, options = {}) {
   const res = await fetch(BASE + url, options)
   if (res.status === 204) return null
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new Error(err.detail || 'Request failed')
+    throw new Error(formatDetail(err.detail) || 'Request failed')
   }
   return res.json()
 }

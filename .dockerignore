@@ -7,3 +7,5 @@ __pycache__
 .env
 data/
 uploads/
+backend/.venv
+backend/tests

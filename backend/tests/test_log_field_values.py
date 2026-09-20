@@ -398,3 +398,39 @@ def test_option_id_validated_for_existence_and_field_ownership(client, category,
         },
     )
     assert r2.status_code == 400
+
+
+def test_update_log_rejects_unknown_category(client, category, fields):
+    """PUT 一个不存在的 category_id 必须 400，而不是外键炸出来的 500。"""
+    log = _make_log(client, category)
+    r = client.put(f"/api/logs/{log['id']}", json={"category_id": 9999})
+    assert r.status_code == 400
+    assert r.json()["detail"] == "Invalid category"
+
+    # 原日志没有被改坏
+    body = client.get(f"/api/logs/{log['id']}").json()
+    assert body["category_id"] == category["id"]
+
+
+def test_date_value_must_be_yyyy_mm_dd(client, category, fields):
+    """date 字段的值没有格式校验的话，排序（字符串比较）会静默排错。"""
+    for bad in ("not-a-date", "2026/03/01", "2026-3-1", "2026-02-30"):
+        r = client.post(
+            "/api/logs",
+            data={
+                "category_id": category["id"],
+                "description": "x",
+                "field_values": json.dumps({str(fields["date"]["id"]): bad}),
+            },
+        )
+        assert r.status_code == 400, f"{bad} 被接受了"
+
+    ok = client.post(
+        "/api/logs",
+        data={
+            "category_id": category["id"],
+            "description": "x",
+            "field_values": json.dumps({str(fields["date"]["id"]): "2026-03-01"}),
+        },
+    )
+    assert ok.status_code == 201

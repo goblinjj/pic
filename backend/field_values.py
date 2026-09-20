@@ -4,6 +4,9 @@
 由路由层翻译成 HTTP 400。
 """
 
+import re
+from datetime import date
+
 SCALAR_COLUMN = {
     "text": "value_text",
     "textarea": "value_text",
@@ -91,9 +94,32 @@ def _check_option_belongs_to_field(db, field_id, option_id, field_name):
         raise ValueError(f"选项 {option_id} 不属于字段「{field_name}」")
 
 
-def save_field_values(db, log_id, category_id, values):
-    """全量替换某条日志的自定义字段值。
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
+
+def _normalize_date(value, field_name):
+    """date 的值必须是 YYYY-MM-DD。
+
+    排序走的是 value_date 的字符串比较，格式一旦混进来就会静默排错，
+    所以在写入前就拦掉。
+    """
+    text = str(value)
+    if not _DATE_RE.match(text):
+        raise ValueError(f"字段「{field_name}」需要 YYYY-MM-DD 格式的日期")
+    try:
+        year, month, day = (int(part) for part in text.split("-"))
+        date(year, month, day)
+    except ValueError:
+        raise ValueError(f"字段「{field_name}」不是一个真实存在的日期")
+    return text
+
+
+def save_field_values(db, log_id, category_id, values):
+    """替换 values 里出现过的那些字段的值（未出现的字段保持原样）。
+
+    注意不是全量替换：只有 values 里带到的 field_id 会被先删后写，
+    没带到的字段的旧值原封不动。前端每次提交都会带上该分类的全部字段，
+    所以实际效果是全量替换；但 PUT {"field_values": {}} 不会清空任何东西。
     values 的 key 是 field_id（字符串或整数皆可），value 的形状取决于字段类型：
     标量类型是标量，select 是 option_id，multiselect 是 option_id 列表。
     校验失败抛 ValueError，由路由层翻译成 400。
@@ -167,7 +193,7 @@ def save_field_values(db, log_id, category_id, values):
             db.execute(
                 "INSERT INTO log_field_values (log_id, field_id, value_date) "
                 "VALUES (?, ?, ?)",
-                (log_id, field_id, str(value)),
+                (log_id, field_id, _normalize_date(value, field["name"])),
             )
         else:
             db.execute(
@@ -177,6 +203,10 @@ def save_field_values(db, log_id, category_id, values):
             )
 
 
+# 只有 number 和 date 能排序：这两种类型写入时 option_id 恒为 NULL，
+# 于是唯一索引 idx_lfv_uniq(log_id, field_id, COALESCE(option_id,-1)) 保证
+# 每条日志每个字段最多一行值，build_sort 的 LEFT JOIN 才不会扇出成多行、
+# 在分页下静默丢行或重复行。前提是字段的 type 不可变（字段编辑不允许改类型）。
 SORTABLE_COLUMN = {"number": "s.value_num", "date": "s.value_date"}
 
 

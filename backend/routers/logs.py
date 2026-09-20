@@ -204,6 +204,14 @@ def update_log(
         raise HTTPException(404, "Log not found")
     current_category = existing["category_id"]
 
+    if body.category_id is not None:
+        # 和 create_log 一样先校验分类存在，否则外键报错会变成未捕获的 500
+        cat = db.execute(
+            "SELECT id FROM categories WHERE id = ?", (body.category_id,)
+        ).fetchone()
+        if not cat:
+            raise HTTPException(400, "Invalid category")
+
     updates, params = [], []
     if body.category_id is not None:
         updates.append("category_id = ?")

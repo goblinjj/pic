@@ -322,7 +322,13 @@ function cardValue(fv) {
 }
 
 onMounted(async () => {
-  categories.value = await api.getCategories()
+  // 分类拉不回来不能连日志一起不加载：否则用户只看到「暂无日志」，
+  // 对个人存档来说读起来就是「我的数据没了」
+  try {
+    categories.value = await api.getCategories()
+  } catch (e) {
+    alert(e.message)
+  }
   load()
 })
 </script>
