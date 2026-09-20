@@ -119,6 +119,18 @@
             {{ log.description }}
           </p>
 
+          <!-- Custom fields on card -->
+          <div v-if="log.field_values && log.field_values.length" class="mb-1.5 space-y-0.5">
+            <div
+              v-for="fv in log.field_values"
+              :key="fv.field_id"
+              class="flex items-baseline gap-1.5 text-[10px] leading-tight"
+            >
+              <span class="shrink-0 text-slate-400">{{ fv.name }}</span>
+              <span class="min-w-0 flex-1 truncate text-slate-600">{{ cardValue(fv) }}</span>
+            </div>
+          </div>
+
           <!-- Date -->
           <div class="text-[10px] text-slate-400">
             {{ formatDate(log.created_at) }}
@@ -198,6 +210,18 @@ async function load() {
 function formatDate(dt) {
   if (!dt) return ''
   return new Date(dt).toLocaleString('zh-CN')
+}
+
+function cardValue(fv) {
+  if (fv.type === 'select') {
+    return fv.option_labels[0] || ''
+  }
+  if (fv.type === 'multiselect') {
+    const labels = fv.option_labels || []
+    if (labels.length <= 2) return labels.join('、')
+    return `${labels.slice(0, 2).join('、')} +${labels.length - 2}`
+  }
+  return fv.value
 }
 
 onMounted(async () => {
