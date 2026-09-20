@@ -142,13 +142,22 @@ watch(() => form.value.category_id, async (cid) => {
     return
   }
   fieldsLoading.value = true
-  const fetched = await api.getCategoryFields(cid)
-  if (seq !== requestSeq) return // 已被更新的分类切换取代，丢弃这次的结果
-  fields.value = fetched
-  // 切换分类时清空已填的自定义值，避免跨分类的脏数据
-  fieldValues.value = buildValueMap(fields.value, pendingValues || {})
-  pendingValues = null
-  fieldsLoading.value = false
+  try {
+    const fetched = await api.getCategoryFields(cid)
+    if (seq !== requestSeq) return // 已被更新的分类切换取代，丢弃这次的结果
+    fields.value = fetched
+    // 切换分类时清空已填的自定义值，避免跨分类的脏数据
+    fieldValues.value = buildValueMap(fields.value, pendingValues || {})
+    pendingValues = null
+    fieldsLoading.value = false
+  } catch (e) {
+    if (seq !== requestSeq) return // 已被取代的请求失败，与当前分类状态无关，忽略
+    fields.value = []
+    fieldValues.value = {}
+    pendingValues = null
+    fieldsLoading.value = false
+    alert(e.message)
+  }
 })
 
 onMounted(async () => {
