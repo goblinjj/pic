@@ -64,10 +64,10 @@
       <div class="pt-2">
         <button
           type="submit"
-          :disabled="submitting"
+          :disabled="submitting || fieldsLoading"
           class="w-full rounded-xl bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-700 disabled:opacity-50"
         >
-          {{ submitting ? '提交中...' : (isEdit ? '保存修改' : '创建日志') }}
+          {{ submitting ? '提交中...' : (fieldsLoading ? '字段加载中...' : (isEdit ? '保存修改' : '创建日志')) }}
         </button>
         <button
           type="button"
@@ -104,8 +104,11 @@ const form = ref({
 
 const fields = ref([])
 const fieldValues = ref({})
+const fieldsLoading = ref(false)
 // 编辑模式下先把已有值暂存在这里，等分类的字段定义拉回来后再套用
 let pendingValues = null
+// 请求序号：避免分类快速切换时，旧请求的响应晚于新请求落地，覆盖新分类的状态
+let requestSeq = 0
 
 function defaultValue(field) {
   return field.type === 'multiselect' ? [] : ''
@@ -130,16 +133,22 @@ function valuesFromLog(log) {
 }
 
 watch(() => form.value.category_id, async (cid) => {
+  const seq = ++requestSeq
   if (!cid) {
     fields.value = []
     fieldValues.value = {}
     pendingValues = null
+    fieldsLoading.value = false
     return
   }
-  fields.value = await api.getCategoryFields(cid)
+  fieldsLoading.value = true
+  const fetched = await api.getCategoryFields(cid)
+  if (seq !== requestSeq) return // 已被更新的分类切换取代，丢弃这次的结果
+  fields.value = fetched
   // 切换分类时清空已填的自定义值，避免跨分类的脏数据
   fieldValues.value = buildValueMap(fields.value, pendingValues || {})
   pendingValues = null
+  fieldsLoading.value = false
 })
 
 onMounted(async () => {
@@ -173,6 +182,7 @@ function firstMissingRequired() {
 
 async function submit() {
   if (!form.value.category_id) return alert('请选择分类')
+  if (fieldsLoading.value) return alert('字段加载中，请稍候')
   const missing = firstMissingRequired()
   if (missing) return alert(`字段「${missing.name}」为必填`)
 
