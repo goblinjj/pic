@@ -25,11 +25,45 @@ export const api = {
   }),
   deleteCategory: (id) => request(`/api/categories/${id}`, { method: 'DELETE' }),
 
+  // Category fields
+  getCategoryFields: (cid) => request(`/api/categories/${cid}/fields`),
+  createField: (cid, data) => request(`/api/categories/${cid}/fields`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  }),
+  updateField: (fid, data) => request(`/api/fields/${fid}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  }),
+  deleteField: (fid) => request(`/api/fields/${fid}`, { method: 'DELETE' }),
+  getFieldUsage: (fid) => request(`/api/fields/${fid}/usage`),
+
+  // Field options
+  createOption: (fid, data) => request(`/api/fields/${fid}/options`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  }),
+  updateOption: (oid, data) => request(`/api/options/${oid}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  }),
+  deleteOption: (oid) => request(`/api/options/${oid}`, { method: 'DELETE' }),
+  getOptionUsage: (oid) => request(`/api/options/${oid}/usage`),
+
   // Logs
   getLogs: (params = {}) => {
     const q = new URLSearchParams()
     for (const [k, v] of Object.entries(params)) {
-      if (v !== null && v !== undefined && v !== '') q.set(k, v)
+      if (v === null || v === undefined || v === '') continue
+      if (Array.isArray(v)) {
+        for (const item of v) q.append(k, item)
+      } else {
+        q.set(k, v)
+      }
     }
     return request(`/api/logs?${q}`)
   },
