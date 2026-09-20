@@ -72,6 +72,25 @@ def _is_empty(value):
     return value is None or value == "" or value == []
 
 
+def _coerce_option_id(raw_option, field_name):
+    """把提交的选项值转成 int option_id；形状不对（列表、字典等）一律 ValueError。"""
+    if isinstance(raw_option, bool) or isinstance(raw_option, (list, dict)):
+        raise ValueError(f"字段「{field_name}」的选项 id 不合法")
+    try:
+        return int(raw_option)
+    except (TypeError, ValueError):
+        raise ValueError(f"字段「{field_name}」的选项 id 不合法")
+
+
+def _check_option_belongs_to_field(db, field_id, option_id, field_name):
+    row = db.execute(
+        "SELECT id FROM field_options WHERE id = ? AND field_id = ?",
+        (option_id, field_id),
+    ).fetchone()
+    if not row:
+        raise ValueError(f"选项 {option_id} 不属于字段「{field_name}」")
+
+
 def save_field_values(db, log_id, category_id, values):
     """全量替换某条日志的自定义字段值。
 
@@ -112,22 +131,27 @@ def save_field_values(db, log_id, category_id, values):
         field = fields[field_id]
         ftype = field["type"]
         if ftype == "multiselect":
+            if not isinstance(value, list):
+                raise ValueError(f"字段「{field['name']}」需要提交列表")
             seen = set()
             for raw_option in value:
-                option_id = int(raw_option)
+                option_id = _coerce_option_id(raw_option, field["name"])
                 if option_id in seen:
                     continue
                 seen.add(option_id)
+                _check_option_belongs_to_field(db, field_id, option_id, field["name"])
                 db.execute(
                     "INSERT INTO log_field_values (log_id, field_id, option_id) "
                     "VALUES (?, ?, ?)",
                     (log_id, field_id, option_id),
                 )
         elif ftype == "select":
+            option_id = _coerce_option_id(value, field["name"])
+            _check_option_belongs_to_field(db, field_id, option_id, field["name"])
             db.execute(
                 "INSERT INTO log_field_values (log_id, field_id, option_id) "
                 "VALUES (?, ?, ?)",
-                (log_id, field_id, int(value)),
+                (log_id, field_id, option_id),
             )
         elif ftype == "number":
             try:

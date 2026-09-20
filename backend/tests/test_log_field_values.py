@@ -266,6 +266,135 @@ def test_empty_value_clears_the_field(client, category, fields):
             "field_values": json.dumps({str(fid): "有值"}),
         },
     ).json()
+    assert log["field_values"][0]["value"] == "有值"
 
     updated = client.put(f"/api/logs/{log['id']}", json={"field_values": {str(fid): ""}}).json()
     assert updated["field_values"] == []
+
+
+def test_invalid_field_values_leave_no_orphan_log_on_create(client, category, fields):
+    """Critical 1: a 400 from bad field_values on POST /api/logs must not create a log row."""
+    before = client.get("/api/logs").json()
+    r = client.post(
+        "/api/logs",
+        data={
+            "category_id": category["id"],
+            "description": "不应该被创建",
+            "field_values": json.dumps({str(fields["number"]["id"]): "不是数字"}),
+        },
+    )
+    assert r.status_code == 400
+
+    after = client.get("/api/logs").json()
+    assert after["total"] == before["total"]
+    assert all(item["description"] != "不应该被创建" for item in after["items"])
+
+
+def test_failed_update_leaves_log_and_field_values_unchanged(client, category, fields):
+    """Critical 2: a 400 during PUT must not leave a partially-applied category/field change."""
+    log = client.post(
+        "/api/logs",
+        data={
+            "category_id": category["id"],
+            "description": "x",
+            "field_values": json.dumps({str(fields["text"]["id"]): "旧值"}),
+        },
+    ).json()
+
+    other = client.post("/api/categories", json={"name": "另一个分类"}).json()
+    client.post(
+        f"/api/categories/{other['id']}/fields",
+        json={"name": "必填项", "type": "text", "required": True},
+    )
+
+    r = client.put(
+        f"/api/logs/{log['id']}",
+        json={"category_id": other["id"], "field_values": {}},
+    )
+    assert r.status_code == 400
+
+    after = client.get(f"/api/logs/{log['id']}").json()
+    assert after["category_id"] == category["id"]
+    notes = [fv for fv in after["field_values"] if fv["name"] == "备注"]
+    assert len(notes) == 1
+    assert notes[0]["value"] == "旧值"
+
+
+def test_changing_category_clears_old_field_values(client, category, fields, db_conn):
+    """Critical 2b: switching category must drop field values that don't belong to it,
+    even on the success path and even when field_values isn't submitted at all."""
+    log = client.post(
+        "/api/logs",
+        data={
+            "category_id": category["id"],
+            "description": "x",
+            "field_values": json.dumps({str(fields["text"]["id"]): "旧值"}),
+        },
+    ).json()
+
+    other = client.post("/api/categories", json={"name": "空分类"}).json()
+
+    updated = client.put(f"/api/logs/{log['id']}", json={"category_id": other["id"]}).json()
+
+    assert updated["category_id"] == other["id"]
+    assert updated["field_values"] == []
+
+    rows = db_conn.execute(
+        "SELECT id FROM log_field_values WHERE log_id = ?", (log["id"],)
+    ).fetchall()
+    assert rows == []
+
+
+def test_wrong_shaped_values_are_rejected_not_crashed(client, category, fields):
+    """Important 3: a list where a scalar belongs (select) or a scalar where a list
+    belongs (multiselect) must be a 400, not an uncaught TypeError/500."""
+    nike, adidas = fields["select"]["options"]
+    coat = fields["multiselect"]["options"][0]
+
+    r1 = client.post(
+        "/api/logs",
+        data={
+            "category_id": category["id"],
+            "description": "x",
+            "field_values": json.dumps(
+                {str(fields["select"]["id"]): [nike["id"], adidas["id"]]}
+            ),
+        },
+    )
+    assert r1.status_code == 400
+
+    r2 = client.post(
+        "/api/logs",
+        data={
+            "category_id": category["id"],
+            "description": "x",
+            "field_values": json.dumps({str(fields["multiselect"]["id"]): coat["id"]}),
+        },
+    )
+    assert r2.status_code == 400
+
+
+def test_option_id_validated_for_existence_and_field_ownership(client, category, fields):
+    """Important 4: a non-existent option_id, or one belonging to a different field,
+    must be a 400 (not a 500 from an uncaught IntegrityError), and must be rejected
+    even when it exists on the wrong field."""
+    r1 = client.post(
+        "/api/logs",
+        data={
+            "category_id": category["id"],
+            "description": "x",
+            "field_values": json.dumps({str(fields["select"]["id"]): 999999}),
+        },
+    )
+    assert r1.status_code == 400
+
+    coat = fields["multiselect"]["options"][0]  # belongs to multiselect, not select
+    r2 = client.post(
+        "/api/logs",
+        data={
+            "category_id": category["id"],
+            "description": "x",
+            "field_values": json.dumps({str(fields["select"]["id"]): coat["id"]}),
+        },
+    )
+    assert r2.status_code == 400

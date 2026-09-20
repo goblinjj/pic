@@ -94,37 +94,41 @@ async def create_log(
     if not cat:
         raise HTTPException(400, "Invalid category")
 
-    cur = db.execute(
-        "INSERT INTO logs (category_id, description, external_link) VALUES (?, ?, ?)",
-        (category_id, description, external_link),
-    )
-    log_id = cur.lastrowid
-    db.commit()
-
     try:
         parsed_values = json.loads(field_values or "{}")
     except json.JSONDecodeError:
         raise HTTPException(400, "field_values 不是合法的 JSON")
     if not isinstance(parsed_values, dict):
         raise HTTPException(400, "field_values 必须是对象")
-    _apply_field_values(db, log_id, category_id, parsed_values)
-    db.commit()
 
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
-    for f in files:
-        if not f.filename:
-            continue
-        ext = os.path.splitext(f.filename)[1]
-        stored_name = f"{uuid.uuid4().hex}{ext}"
-        path = os.path.join(UPLOAD_DIR, stored_name)
-        content = await f.read()
-        with open(path, "wb") as out:
-            out.write(content)
-        generate_thumbnail(stored_name)
-        db.execute(
-            "INSERT INTO images (log_id, filename, original_name) VALUES (?, ?, ?)",
-            (log_id, stored_name, f.filename),
+    try:
+        cur = db.execute(
+            "INSERT INTO logs (category_id, description, external_link) VALUES (?, ?, ?)",
+            (category_id, description, external_link),
         )
+        log_id = cur.lastrowid
+
+        _apply_field_values(db, log_id, category_id, parsed_values)
+
+        os.makedirs(UPLOAD_DIR, exist_ok=True)
+        for f in files:
+            if not f.filename:
+                continue
+            ext = os.path.splitext(f.filename)[1]
+            stored_name = f"{uuid.uuid4().hex}{ext}"
+            path = os.path.join(UPLOAD_DIR, stored_name)
+            content = await f.read()
+            with open(path, "wb") as out:
+                out.write(content)
+            generate_thumbnail(stored_name)
+            db.execute(
+                "INSERT INTO images (log_id, filename, original_name) VALUES (?, ?, ?)",
+                (log_id, stored_name, f.filename),
+            )
+    except HTTPException:
+        db.rollback()
+        raise
+
     db.commit()
 
     row = db.execute(
@@ -150,9 +154,12 @@ def update_log(
     body: LogUpdate,
     db: sqlite3.Connection = Depends(get_db),
 ):
-    existing = db.execute("SELECT id FROM logs WHERE id = ? AND deleted_at IS NULL", (log_id,)).fetchone()
+    existing = db.execute(
+        "SELECT category_id FROM logs WHERE id = ? AND deleted_at IS NULL", (log_id,)
+    ).fetchone()
     if not existing:
         raise HTTPException(404, "Log not found")
+    current_category = existing["category_id"]
 
     updates, params = [], []
     if body.category_id is not None:
@@ -164,22 +171,32 @@ def update_log(
     if body.external_link is not None:
         updates.append("external_link = ?")
         params.append(body.external_link)
-    if updates:
-        updates.append("updated_at = CURRENT_TIMESTAMP")
-        params.append(log_id)
-        db.execute(
-            f"UPDATE logs SET {', '.join(updates)} WHERE id = ?", params
-        )
-        db.commit()
 
-    if body.field_values is not None:
-        target_category = body.category_id
-        if target_category is None:
-            target_category = db.execute(
-                "SELECT category_id FROM logs WHERE id = ?", (log_id,)
-            ).fetchone()["category_id"]
-        _apply_field_values(db, log_id, target_category, body.field_values)
-        db.commit()
+    try:
+        if updates:
+            updates.append("updated_at = CURRENT_TIMESTAMP")
+            params.append(log_id)
+            db.execute(
+                f"UPDATE logs SET {', '.join(updates)} WHERE id = ?", params
+            )
+
+        target_category = body.category_id if body.category_id is not None else current_category
+
+        if body.field_values is not None:
+            _apply_field_values(db, log_id, target_category, body.field_values)
+
+        if body.category_id is not None and body.category_id != current_category:
+            # 切换分类要清掉不属于新分类的旧字段值，不能靠前端清表单状态
+            db.execute(
+                "DELETE FROM log_field_values WHERE log_id = ? AND field_id NOT IN "
+                "(SELECT id FROM category_fields WHERE category_id = ?)",
+                (log_id, target_category),
+            )
+    except HTTPException:
+        db.rollback()
+        raise
+
+    db.commit()
 
     row = db.execute(
         f"SELECT {LOG_COLUMNS} FROM logs l WHERE l.id = ?", (log_id,)
