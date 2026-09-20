@@ -81,3 +81,91 @@ def test_delete_field(client, category):
 
 def test_delete_missing_field_returns_404(client):
     assert client.delete("/api/fields/99999").status_code == 404
+
+
+@pytest.fixture()
+def select_field(client, category):
+    return client.post(
+        f"/api/categories/{category['id']}/fields",
+        json={"name": "品牌", "type": "select"},
+    ).json()
+
+
+def test_create_option_and_read_back_on_field(client, category, select_field):
+    r = client.post(f"/api/fields/{select_field['id']}/options", json={"label": "Nike"})
+    assert r.status_code == 201
+    assert r.json()["label"] == "Nike"
+
+    fields = client.get(f"/api/categories/{category['id']}/fields").json()
+    assert [o["label"] for o in fields[0]["options"]] == ["Nike"]
+
+
+def test_options_are_ordered_by_sort_order(client, category, select_field):
+    fid = select_field["id"]
+    client.post(f"/api/fields/{fid}/options", json={"label": "乙", "sort_order": 5})
+    client.post(f"/api/fields/{fid}/options", json={"label": "甲", "sort_order": 1})
+    fields = client.get(f"/api/categories/{category['id']}/fields").json()
+    assert [o["label"] for o in fields[0]["options"]] == ["甲", "乙"]
+
+
+def test_option_rejected_on_non_option_field(client, category):
+    text_field = client.post(
+        f"/api/categories/{category['id']}/fields",
+        json={"name": "备注", "type": "text"},
+    ).json()
+    r = client.post(f"/api/fields/{text_field['id']}/options", json={"label": "x"})
+    assert r.status_code == 400
+
+
+def test_rename_option(client, select_field):
+    opt = client.post(f"/api/fields/{select_field['id']}/options", json={"label": "Nike"}).json()
+    r = client.put(f"/api/options/{opt['id']}", json={"label": "NIKE"})
+    assert r.status_code == 200
+    assert r.json()["label"] == "NIKE"
+
+
+def test_field_usage_counts_logs(client, category, select_field, db_conn):
+    opt = client.post(f"/api/fields/{select_field['id']}/options", json={"label": "Nike"}).json()
+    cur = db_conn.execute(
+        "INSERT INTO logs (category_id, description) VALUES (?, '')", (category["id"],)
+    )
+    log_id = cur.lastrowid
+    db_conn.execute(
+        "INSERT INTO log_field_values (log_id, field_id, option_id) VALUES (?, ?, ?)",
+        (log_id, select_field["id"], opt["id"]),
+    )
+    db_conn.commit()
+
+    assert client.get(f"/api/fields/{select_field['id']}/usage").json()["log_count"] == 1
+    assert client.get(f"/api/options/{opt['id']}/usage").json()["log_count"] == 1
+
+
+def test_deleting_field_cascades_to_options_and_values(client, category, select_field, db_conn):
+    opt = client.post(f"/api/fields/{select_field['id']}/options", json={"label": "Nike"}).json()
+    cur = db_conn.execute(
+        "INSERT INTO logs (category_id, description) VALUES (?, '')", (category["id"],)
+    )
+    db_conn.execute(
+        "INSERT INTO log_field_values (log_id, field_id, option_id) VALUES (?, ?, ?)",
+        (cur.lastrowid, select_field["id"], opt["id"]),
+    )
+    db_conn.commit()
+
+    assert client.delete(f"/api/fields/{select_field['id']}").status_code == 204
+    assert db_conn.execute("SELECT id FROM field_options").fetchall() == []
+    assert db_conn.execute("SELECT id FROM log_field_values").fetchall() == []
+
+
+def test_deleting_option_cascades_to_values(client, category, select_field, db_conn):
+    opt = client.post(f"/api/fields/{select_field['id']}/options", json={"label": "Nike"}).json()
+    cur = db_conn.execute(
+        "INSERT INTO logs (category_id, description) VALUES (?, '')", (category["id"],)
+    )
+    db_conn.execute(
+        "INSERT INTO log_field_values (log_id, field_id, option_id) VALUES (?, ?, ?)",
+        (cur.lastrowid, select_field["id"], opt["id"]),
+    )
+    db_conn.commit()
+
+    assert client.delete(f"/api/options/{opt['id']}").status_code == 204
+    assert db_conn.execute("SELECT id FROM log_field_values").fetchall() == []
