@@ -175,3 +175,60 @@ def save_field_values(db, log_id, category_id, values):
                 "VALUES (?, ?, ?)",
                 (log_id, field_id, str(value)),
             )
+
+
+SORTABLE_COLUMN = {"number": "s.value_num", "date": "s.value_date"}
+
+
+def build_option_filters(fv_params):
+    """把 ['12:34', '12:35', '13:56'] 转成 (WHERE 子句列表, 参数列表)。
+
+    同一字段内的多个选项是 OR，不同字段之间是 AND。
+    对 multiselect 而言这正好等价于「包含任一选中项」。
+    非法格式的条目直接忽略。
+    """
+    grouped = {}
+    for item in fv_params or []:
+        if ":" not in item:
+            continue
+        raw_field, raw_option = item.split(":", 1)
+        if not raw_field.isdigit() or not raw_option.isdigit():
+            continue
+        grouped.setdefault(int(raw_field), []).append(int(raw_option))
+
+    clauses, params = [], []
+    for field_id, option_ids in grouped.items():
+        placeholders = ",".join("?" * len(option_ids))
+        clauses.append(
+            "EXISTS (SELECT 1 FROM log_field_values v "
+            f"WHERE v.log_id = l.id AND v.field_id = ? "
+            f"AND v.option_id IN ({placeholders}))"
+        )
+        params.append(field_id)
+        params.extend(option_ids)
+    return clauses, params
+
+
+def build_sort(db, sort_param):
+    """把 '15:desc' 转成 (JOIN 子句, JOIN 参数, ORDER BY 子句)。
+
+    只有 number 与 date 类型的字段可排序；其余一律回落到 created_at DESC。
+    """
+    default = ("", [], "l.created_at DESC")
+    if not sort_param or ":" not in sort_param:
+        return default
+
+    raw_field, direction = sort_param.split(":", 1)
+    if not raw_field.isdigit() or direction not in ("asc", "desc"):
+        return default
+
+    row = db.execute(
+        "SELECT type FROM category_fields WHERE id = ?", (int(raw_field),)
+    ).fetchone()
+    if not row or row["type"] not in SORTABLE_COLUMN:
+        return default
+
+    column = SORTABLE_COLUMN[row["type"]]
+    join_sql = " LEFT JOIN log_field_values s ON s.log_id = l.id AND s.field_id = ?"
+    order_sql = f"{column} {direction.upper()} NULLS LAST, l.created_at DESC"
+    return join_sql, [int(raw_field)], order_sql

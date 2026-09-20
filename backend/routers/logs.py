@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
 import json
 import sqlite3
 import uuid
@@ -7,7 +7,12 @@ from typing import Optional
 from database import get_db
 from models import LogOut, LogListOut, LogUpdate, StatusUpdate, ImageOut
 from thumbnail import generate_thumbnail
-from field_values import load_field_values, save_field_values
+from field_values import (
+    load_field_values,
+    save_field_values,
+    build_option_filters,
+    build_sort,
+)
 
 router = APIRouter(prefix="/api/logs", tags=["logs"])
 
@@ -47,6 +52,8 @@ def list_logs(
     search: Optional[str] = None,
     category_id: Optional[int] = None,
     status: Optional[str] = None,
+    fv: list[str] = Query(default=[]),
+    sort: Optional[str] = None,
     page: int = 1,
     size: int = 20,
     db: sqlite3.Connection = Depends(get_db),
@@ -62,17 +69,22 @@ def list_logs(
         where.append("l.status = ?")
         params.append(status)
 
+    fv_clauses, fv_params = build_option_filters(fv)
+    where.extend(fv_clauses)
+    params.extend(fv_params)
+
     where_clause = " WHERE " + " AND ".join(where)
 
     total = db.execute(
-        f"SELECT COUNT(*) as c FROM logs l{where_clause}", params
+        f"SELECT COUNT(*) AS c FROM logs l{where_clause}", params
     ).fetchone()["c"]
 
+    join_sql, join_params, order_sql = build_sort(db, sort)
     offset = (page - 1) * size
     rows = db.execute(
-        f"SELECT {LOG_COLUMNS} FROM logs l{where_clause} "
-        f"ORDER BY l.created_at DESC LIMIT ? OFFSET ?",
-        params + [size, offset],
+        f"SELECT {LOG_COLUMNS} FROM logs l{join_sql}{where_clause} "
+        f"ORDER BY {order_sql} LIMIT ? OFFSET ?",
+        join_params + params + [size, offset],
     ).fetchall()
 
     items = [_build_log(db, r) for r in rows]
