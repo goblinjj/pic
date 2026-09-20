@@ -214,7 +214,7 @@ def build_sort(db, sort_param):
 
     只有 number 与 date 类型的字段可排序；其余一律回落到 created_at DESC。
     """
-    default = ("", [], "l.created_at DESC")
+    default = ("", [], "l.created_at DESC, l.id DESC")
     if not sort_param or ":" not in sort_param:
         return default
 
@@ -230,5 +230,5 @@ def build_sort(db, sort_param):
 
     column = SORTABLE_COLUMN[row["type"]]
     join_sql = " LEFT JOIN log_field_values s ON s.log_id = l.id AND s.field_id = ?"
-    order_sql = f"{column} {direction.upper()} NULLS LAST, l.created_at DESC"
+    order_sql = f"{column} {direction.upper()} NULLS LAST, l.created_at DESC, l.id DESC"
     return join_sql, [int(raw_field)], order_sql

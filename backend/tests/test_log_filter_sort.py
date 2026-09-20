@@ -119,6 +119,18 @@ def test_sort_by_number_desc_puts_empty_last(client, setup):
     ).json()
     assert _descriptions(body) == ["Nike外套", "Adidas卫衣", "Uniqlo两种"]
 
+    # The order above happens to equal plain insertion order (Nike created first,
+    # then Adidas, then Uniqlo), so on its own it wouldn't prove real number sorting
+    # rather than some unrelated default ordering. Requesting the same field
+    # ascending must swap the priced pair while still keeping the empty-valued log
+    # last, which only a working build_sort produces.
+    asc_body = client.get(
+        "/api/logs",
+        params={"category_id": setup["category"]["id"],
+                "sort": f"{setup['price']['id']}:asc"},
+    ).json()
+    assert _descriptions(asc_body) == ["Adidas卫衣", "Nike外套", "Uniqlo两种"]
+
 
 def test_sort_by_number_asc_puts_empty_last(client, setup):
     body = client.get(
@@ -154,6 +166,18 @@ def test_garbage_filter_and_sort_params_are_ignored(client, setup):
                 "fv": ["abc", "1:", ":2"], "sort": "垃圾"},
     ).json()
     assert body["total"] == 3
+
+    # Prove the garbage entries were actually parsed and discarded, not that fv/sort
+    # never reach the query at all: mixing in one VALID fv entry alongside the same
+    # garbage must still filter down to the matching logs.
+    filtered = client.get(
+        "/api/logs",
+        params={"category_id": setup["category"]["id"],
+                "fv": ["abc", "1:", ":2", f"{setup['kind']['id']}:{setup['kinds'][0]['id']}"],
+                "sort": "垃圾"},
+    ).json()
+    assert filtered["total"] == 2
+    assert set(_descriptions(filtered)) == {"Nike外套", "Uniqlo两种"}
 
 
 def test_filter_total_reflects_filtered_count(client, setup):
