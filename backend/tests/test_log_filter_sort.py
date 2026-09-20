@@ -187,3 +187,70 @@ def test_filter_total_reflects_filtered_count(client, setup):
                 "fv": [f"{setup['kind']['id']}:{setup['kinds'][0]['id']}"]},
     ).json()
     assert body["total"] == 2
+
+
+def test_list_only_returns_show_in_list_fields(client, setup):
+    client.put(f"/api/fields/{setup['brand']['id']}", json={"show_in_list": True})
+
+    body = client.get(
+        "/api/logs", params={"category_id": setup["category"]["id"]}
+    ).json()
+    nike = next(i for i in body["items"] if i["description"] == "Nike外套")
+    assert [fv["name"] for fv in nike["field_values"]] == ["品牌"]
+    assert nike["field_values"][0]["option_labels"] == ["Nike"]
+
+
+def test_detail_still_returns_all_fields(client, setup):
+    client.put(f"/api/fields/{setup['brand']['id']}", json={"show_in_list": True})
+    log_id = setup["logs"]["nike_coat"]["id"]
+
+    body = client.get(f"/api/logs/{log_id}").json()
+    assert [fv["name"] for fv in body["field_values"]] == [
+        "品牌", "衣服类型", "购入价格", "购入日期"
+    ]
+
+
+def test_list_with_no_show_in_list_fields_returns_empty(client, setup):
+    body = client.get(
+        "/api/logs", params={"category_id": setup["category"]["id"]}
+    ).json()
+    assert all(item["field_values"] == [] for item in body["items"])
+
+
+def test_list_issues_constant_number_of_queries(client, setup):
+    """回归护栏：列表端点不得随日志条数增加查询次数。
+
+    注意：不能用 monkeypatch 去打 sqlite3.Connection.execute —— 它是不可变的
+    C 扩展类型，赋值会抛 TypeError。改用依赖覆盖注入一个开了 trace 的连接。
+    """
+    import sqlite3
+    import database
+    from main import app
+
+    statements = []
+
+    def tracing_db():
+        conn = sqlite3.connect(database.DB_PATH, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys=ON")
+        conn.set_trace_callback(statements.append)
+        try:
+            yield conn
+        finally:
+            conn.close()
+
+    app.dependency_overrides[database.get_db] = tracing_db
+    try:
+        client.get("/api/logs", params={"category_id": setup["category"]["id"]})
+    finally:
+        app.dependency_overrides.pop(database.get_db, None)
+
+    image_queries = [s for s in statements if "FROM images" in s]
+    assert len(image_queries) <= 1, f"图片查询发生了 {len(image_queries)} 次，应当只有 1 次"
+
+
+def test_list_preserves_category_name(client, setup):
+    body = client.get(
+        "/api/logs", params={"category_id": setup["category"]["id"]}
+    ).json()
+    assert all(item["category_name"] == "欢欢衣服" for item in body["items"])

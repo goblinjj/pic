@@ -40,6 +40,37 @@ def _build_log(db: sqlite3.Connection, log_row) -> dict:
     return log
 
 
+def _build_log_list(db: sqlite3.Connection, rows) -> list[dict]:
+    """批量组装列表项：图片与字段值各一次查询，避免随条数增长的 N+1。"""
+    logs = [dict(r) for r in rows]
+    if not logs:
+        return []
+
+    log_ids = [log["id"] for log in logs]
+    placeholders = ",".join("?" * len(log_ids))
+
+    category_names = {
+        r["id"]: r["name"]
+        for r in db.execute("SELECT id, name FROM categories").fetchall()
+    }
+
+    images: dict[int, list[dict]] = {}
+    for r in db.execute(
+        "SELECT id, log_id, filename, original_name, created_at FROM images "
+        f"WHERE log_id IN ({placeholders}) ORDER BY id",
+        log_ids,
+    ).fetchall():
+        images.setdefault(r["log_id"], []).append(dict(r))
+
+    values = load_field_values(db, log_ids, only_show_in_list=True)
+
+    for log in logs:
+        log["category_name"] = category_names.get(log["category_id"], "")
+        log["images"] = images.get(log["id"], [])
+        log["field_values"] = values.get(log["id"], [])
+    return logs
+
+
 def _apply_field_values(db, log_id: int, category_id: int, values: dict):
     try:
         save_field_values(db, log_id, category_id, values)
@@ -87,7 +118,7 @@ def list_logs(
         join_params + params + [size, offset],
     ).fetchall()
 
-    items = [_build_log(db, r) for r in rows]
+    items = _build_log_list(db, rows)
     return {"items": items, "total": total, "page": page, "size": size}
 
 
