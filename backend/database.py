@@ -56,6 +56,7 @@ def init_db():
     if "deleted_at" not in cols:
         conn.execute("ALTER TABLE logs ADD COLUMN deleted_at DATETIME DEFAULT NULL")
     _init_custom_fields(conn)
+    _migrate_wire_to_field(conn)
     conn.commit()
     conn.close()
 
@@ -106,3 +107,50 @@ def _init_custom_fields(conn):
         CREATE INDEX IF NOT EXISTS idx_lfv_date
             ON log_field_values(field_id, value_date);
     """)
+
+
+GLOVE_CATEGORY_NAME = "手套"
+WIRE_FIELD_NAME = "线材"
+
+
+def _migrate_wire_to_field(conn):
+    """把 logs.wire 的值迁移为「手套」分类下的「线材」自定义字段值。幂等。"""
+    cat = conn.execute(
+        "SELECT id FROM categories WHERE name = ?", (GLOVE_CATEGORY_NAME,)
+    ).fetchone()
+    if not cat:
+        # 全新部署的空库没有任何分类，不凭空创建
+        return
+    category_id = cat[0]
+
+    field = conn.execute(
+        "SELECT id FROM category_fields WHERE category_id = ? AND name = ?",
+        (category_id, WIRE_FIELD_NAME),
+    ).fetchone()
+    if field:
+        field_id = field[0]
+    else:
+        cur = conn.execute(
+            "INSERT INTO category_fields "
+            "(category_id, name, type, required, show_in_list, sort_order) "
+            "VALUES (?, ?, 'text', 0, 0, 0)",
+            (category_id, WIRE_FIELD_NAME),
+        )
+        field_id = cur.lastrowid
+
+    # 只迁移「手套」分类下的日志：线材字段只属于手套，
+    # 给别的分类的日志写入这个 field_id 会破坏数据一致性
+    conn.execute(
+        """
+        INSERT INTO log_field_values (log_id, field_id, value_text)
+        SELECT l.id, ?, l.wire
+        FROM logs l
+        WHERE l.category_id = ?
+          AND COALESCE(l.wire, '') <> ''
+          AND NOT EXISTS (
+              SELECT 1 FROM log_field_values v
+              WHERE v.log_id = l.id AND v.field_id = ?
+          )
+        """,
+        (field_id, category_id, field_id),
+    )
