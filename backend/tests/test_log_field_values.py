@@ -109,6 +109,16 @@ def test_field_values_are_ordered_by_sort_order(client, category, fields, db_con
     assert [fv["name"] for fv in body["field_values"]] == ["备注", "购入日期"]
 
 
-def test_log_without_values_returns_empty_list(client, category, fields):
-    log = _make_log(client, category)
-    assert client.get(f"/api/logs/{log['id']}").json()["field_values"] == []
+def test_log_without_values_returns_empty_list_while_sibling_log_does_not(
+    client, category, fields, db_conn
+):
+    empty_log = _make_log(client, category)
+    filled_log = _make_log(client, category)
+    _write_value(db_conn, filled_log["id"], fields["text"], "value_text", "手写备注")
+
+    empty_body = client.get(f"/api/logs/{empty_log['id']}").json()
+    filled_body = client.get(f"/api/logs/{filled_log['id']}").json()
+
+    assert empty_body["field_values"] == []
+    by_name = {fv["name"]: fv for fv in filled_body["field_values"]}
+    assert by_name["备注"]["value"] == "手写备注"
