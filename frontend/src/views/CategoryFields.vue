@@ -135,6 +135,72 @@
               </button>
             </div>
           </div>
+
+          <!-- Options for select / multiselect -->
+          <div v-if="hasOptions(f)" class="mt-2 pl-9">
+            <button
+              @click="toggleOptions(f.id)"
+              class="text-xs font-medium text-primary-600 hover:text-primary-700"
+            >
+              {{ expanded === f.id ? '收起选项' : `选项（${f.options.length}）` }}
+            </button>
+
+            <div v-if="expanded === f.id" class="mt-2 space-y-1.5">
+              <div
+                v-for="o in f.options"
+                :key="o.id"
+                class="flex items-center gap-2 rounded-lg bg-slate-50 px-2.5 py-1.5"
+              >
+                <template v-if="editingOption === o.id">
+                  <input
+                    type="text"
+                    v-model="optionForm.label"
+                    class="min-w-0 flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 focus:border-primary-400 focus:outline-none"
+                  />
+                  <input
+                    type="text"
+                    v-model.number="optionForm.sort_order"
+                    class="w-10 shrink-0 rounded border border-slate-200 bg-white px-1 py-1 text-center text-xs text-slate-900 focus:border-primary-400 focus:outline-none"
+                  />
+                  <button @click="saveOption(o)" class="shrink-0 rounded bg-primary-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-primary-700">
+                    保存
+                  </button>
+                  <button @click="editingOption = null" class="shrink-0 px-1 text-[10px] text-slate-500 hover:text-slate-700">
+                    取消
+                  </button>
+                </template>
+                <template v-else>
+                  <span class="w-6 shrink-0 text-[10px] text-slate-400">{{ o.sort_order }}</span>
+                  <span class="min-w-0 flex-1 truncate text-xs text-slate-700">{{ o.label }}</span>
+                  <button @click="startEditOption(o)" class="shrink-0 px-1 text-[10px] text-slate-400 hover:text-slate-600">
+                    改名
+                  </button>
+                  <button @click="removeOption(o)" class="shrink-0 px-1 text-[10px] text-slate-400 hover:text-red-500">
+                    删除
+                  </button>
+                </template>
+              </div>
+
+              <form @submit.prevent="addOption(f)" class="flex items-center gap-2 pt-0.5">
+                <input
+                  type="text"
+                  v-model="newOption.label"
+                  placeholder="新选项名称"
+                  required
+                  class="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+                />
+                <input
+                  type="text"
+                  v-model.number="newOption.sort_order"
+                  placeholder="序"
+                  class="w-10 shrink-0 rounded-lg border border-slate-200 bg-white px-1 py-1.5 text-center text-xs text-slate-900 placeholder:text-slate-400 focus:border-primary-400 focus:outline-none"
+                />
+                <button type="submit" class="shrink-0 rounded-lg bg-slate-900 px-2.5 py-1.5 text-[10px] font-medium text-white hover:bg-slate-700">
+                  添加
+                </button>
+              </form>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -165,12 +231,72 @@ const fields = ref([])
 const editing = ref(null)
 const editForm = ref({ name: '', sort_order: 0, required: false, show_in_list: false })
 const newField = ref({ name: '', type: 'text', sort_order: 0, required: false, show_in_list: false })
+const expanded = ref(null)
+const editingOption = ref(null)
+const optionForm = ref({ label: '', sort_order: 0 })
+const newOption = ref({ label: '', sort_order: 0 })
 
 const shownInListCount = computed(() => fields.value.filter((f) => f.show_in_list).length)
 
 function typeLabel(value) {
   const hit = FIELD_TYPES.find((t) => t.value === value)
   return hit ? hit.label : value
+}
+
+function hasOptions(field) {
+  return field.type === 'select' || field.type === 'multiselect'
+}
+
+function toggleOptions(fieldId) {
+  expanded.value = expanded.value === fieldId ? null : fieldId
+  editingOption.value = null
+  newOption.value = { label: '', sort_order: 0 }
+}
+
+async function addOption(field) {
+  if (!newOption.value.label.trim()) return
+  try {
+    await api.createOption(field.id, {
+      label: newOption.value.label.trim(),
+      sort_order: newOption.value.sort_order || 0,
+    })
+    newOption.value = { label: '', sort_order: 0 }
+    await load()
+  } catch (e) {
+    alert(e.message)
+  }
+}
+
+function startEditOption(option) {
+  editingOption.value = option.id
+  optionForm.value = { label: option.label, sort_order: option.sort_order }
+}
+
+async function saveOption(option) {
+  try {
+    await api.updateOption(option.id, {
+      label: optionForm.value.label.trim(),
+      sort_order: optionForm.value.sort_order,
+    })
+    editingOption.value = null
+    await load()
+  } catch (e) {
+    alert(e.message)
+  }
+}
+
+async function removeOption(option) {
+  try {
+    const { log_count } = await api.getOptionUsage(option.id)
+    const message = log_count > 0
+      ? `选项「${option.label}」已被 ${log_count} 条日志使用，删除会一并清除这些数据。确定删除？`
+      : `确定删除选项「${option.label}」？`
+    if (!confirm(message)) return
+    await api.deleteOption(option.id)
+    await load()
+  } catch (e) {
+    alert(e.message)
+  }
 }
 
 async function load() {
