@@ -64,10 +64,10 @@
       <div class="pt-2">
         <button
           type="submit"
-          :disabled="submitting || fieldsLoading"
+          :disabled="submitting || fieldsLoading || fieldsError"
           class="w-full rounded-xl bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-700 disabled:opacity-50"
         >
-          {{ submitting ? '提交中...' : (fieldsLoading ? '字段加载中...' : (isEdit ? '保存修改' : '创建日志')) }}
+          {{ submitting ? '提交中...' : (fieldsLoading ? '字段加载中...' : (fieldsError ? '字段加载失败' : (isEdit ? '保存修改' : '创建日志'))) }}
         </button>
         <button
           type="button"
@@ -105,6 +105,7 @@ const form = ref({
 const fields = ref([])
 const fieldValues = ref({})
 const fieldsLoading = ref(false)
+const fieldsError = ref(false)
 // 编辑模式下先把已有值暂存在这里，等分类的字段定义拉回来后再套用
 let pendingValues = null
 // 请求序号：避免分类快速切换时，旧请求的响应晚于新请求落地，覆盖新分类的状态
@@ -142,6 +143,7 @@ watch(() => form.value.category_id, async (cid) => {
     return
   }
   fieldsLoading.value = true
+  fieldsError.value = false
   try {
     const fetched = await api.getCategoryFields(cid)
     if (seq !== requestSeq) return // 已被更新的分类切换取代，丢弃这次的结果
@@ -150,12 +152,15 @@ watch(() => form.value.category_id, async (cid) => {
     fieldValues.value = buildValueMap(fields.value, pendingValues || {})
     pendingValues = null
     fieldsLoading.value = false
+    fieldsError.value = false
   } catch (e) {
     if (seq !== requestSeq) return // 已被取代的请求失败，与当前分类状态无关，忽略
     fields.value = []
     fieldValues.value = {}
-    pendingValues = null
+    // 不清空 pendingValues：编辑模式下这是日志已保存字段值的唯一副本，
+    // 留着才能在用户重新选择分类后成功拉取时把值套回去
     fieldsLoading.value = false
+    fieldsError.value = true
     alert(e.message)
   }
 })
@@ -192,6 +197,7 @@ function firstMissingRequired() {
 async function submit() {
   if (!form.value.category_id) return alert('请选择分类')
   if (fieldsLoading.value) return alert('字段加载中，请稍候')
+  if (fieldsError.value) return alert('分类字段加载失败，请重新选择该分类后再试')
   const missing = firstMissingRequired()
   if (missing) return alert(`字段「${missing.name}」为必填`)
 
