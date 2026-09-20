@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+#
+# git push 时自动部署到 NAS。
+#
+# 注意：pre-push 在推送「之前」运行，所以真正的推送动作由 deploy.sh 自己完成
+# （git push --no-verify），本 hook 返回后外层那次 push 会变成 "Everything up-to-date"。
+#
+# 跳过：git push --no-verify
+#
+set -euo pipefail
+
+if [ -n "${PICLOG_SKIP_DEPLOY:-}" ]; then
+    echo "PICLOG_SKIP_DEPLOY 已设置，跳过部署"
+    exit 0
+fi
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+exec "$REPO_ROOT/scripts/deploy.sh"

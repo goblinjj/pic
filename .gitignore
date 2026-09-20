@@ -8,3 +8,6 @@ uploads/
 .env
 *.db
 .DS_Store
+.venv/
+devdata/
+devuploads/
