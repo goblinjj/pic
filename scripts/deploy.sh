@@ -134,12 +134,22 @@ ok "容器已重建"
 # ------------------------------------------------------------------ 健康检查
 step "健康检查"
 health_url="http://127.0.0.1:${HEALTH_PORT}${HEALTH_PATH}"
-if ! nas_run "for i in \$(seq 1 $HEALTH_RETRIES); do \
-        code=\$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 '$health_url' || true); \
-        if [ \"\\\$code\" = '200' ]; then echo 'HTTP 200'; exit 0; fi; \
-        sleep 2; \
-     done; \
-     echo \"最后一次响应: \\\${code:-无响应}\"; exit 1"
+# 用 heredoc 而不是 nas_run：后者会再套一层双引号，转义层数一多就容易把
+# 远端变量写成字面量（上一版就是这么挂的——应用返回 200，比较却永远为假）
+if ! ssh "${SSH_OPTS[@]}" "$NAS_HOST" bash -s <<EOF
+export PATH="${REMOTE_PATH}:\$PATH"
+code=""
+for i in \$(seq 1 $HEALTH_RETRIES); do
+    code=\$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 '$health_url' || true)
+    if [ "\$code" = "200" ]; then
+        echo "HTTP \$code"
+        exit 0
+    fi
+    sleep 2
+done
+echo "最后一次响应: \${code:-无响应}"
+exit 1
+EOF
 then
     printf '\n%s最近的容器日志：%s\n' "$C_DIM" "$C_RESET" >&2
     nas_run "cd '$NAS_DIR' && '$NAS_COMPOSE' logs --tail=30 '$NAS_SERVICE'" >&2 || true
