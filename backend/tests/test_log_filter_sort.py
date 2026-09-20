@@ -218,7 +218,13 @@ def test_list_with_no_show_in_list_fields_returns_empty(client, setup):
 
 
 def test_list_issues_constant_number_of_queries(client, setup):
-    """回归护栏：列表端点不得随日志条数增加查询次数。
+    """回归护栏：列表端点发出的 SQL 语句总数不得随日志条数增加。
+
+    只盯着 "FROM images" 不够——它抓不住 categories 或 log_field_values 身上
+    同样的按条查询（比如有人把 _build_log_list 里批量查 categories 的 dict
+    改回逐条 `WHERE id = ?`）。最强的护栏是：跑一次列表请求记下语句总数，
+    再往同一分类里插几条日志、跑第二次，断言两次语句总数完全相同——这样
+    不用列举具体是哪张表，任何形状的逐条查询都会被抓到。
 
     注意：不能用 monkeypatch 去打 sqlite3.Connection.execute —— 它是不可变的
     C 扩展类型，赋值会抛 TypeError。改用依赖覆盖注入一个开了 trace 的连接。
@@ -239,14 +245,50 @@ def test_list_issues_constant_number_of_queries(client, setup):
         finally:
             conn.close()
 
-    app.dependency_overrides[database.get_db] = tracing_db
-    try:
-        client.get("/api/logs", params={"category_id": setup["category"]["id"]})
-    finally:
-        app.dependency_overrides.pop(database.get_db, None)
+    def run_traced_list():
+        statements.clear()
+        app.dependency_overrides[database.get_db] = tracing_db
+        try:
+            client.get(
+                "/api/logs",
+                params={"category_id": setup["category"]["id"], "size": 50},
+            )
+        finally:
+            app.dependency_overrides.pop(database.get_db, None)
+        return list(statements)
 
-    image_queries = [s for s in statements if "FROM images" in s]
-    assert len(image_queries) <= 1, f"图片查询发生了 {len(image_queries)} 次，应当只有 1 次"
+    first_run = run_traced_list()
+
+    def per_shape_counts(run):
+        return {
+            "images": [s for s in run if "FROM images" in s],
+            "categories": [s for s in run if "FROM categories" in s],
+            "log_field_values": [s for s in run if "log_field_values" in s],
+        }
+
+    first_shapes = per_shape_counts(first_run)
+    for shape, queries in first_shapes.items():
+        assert len(queries) <= 1, f"{shape} 查询发生了 {len(queries)} 次，应当只有 1 次\n{queries}"
+
+    # 在同一分类下追加日志，且必须在被 trace 的窗口之外创建，
+    # 不然这些写操作自己产生的语句会污染下一次的统计。
+    for i in range(5):
+        client.post(
+            "/api/logs",
+            data={"category_id": setup["category"]["id"], "description": f"额外日志{i}"},
+        )
+
+    second_run = run_traced_list()
+
+    second_shapes = per_shape_counts(second_run)
+    for shape, queries in second_shapes.items():
+        assert len(queries) <= 1, f"{shape} 查询发生了 {len(queries)} 次，应当只有 1 次\n{queries}"
+
+    assert len(first_run) == len(second_run), (
+        "列表端点发出的语句总数不应随日志条数变化：\n"
+        f"第一次（3 条日志）{len(first_run)} 条语句：{first_run}\n"
+        f"第二次（8 条日志）{len(second_run)} 条语句：{second_run}"
+    )
 
 
 def test_list_preserves_category_name(client, setup):
