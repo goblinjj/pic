@@ -66,3 +66,88 @@ def load_field_values(db, log_ids, only_show_in_list=False):
             entry["value"] = r[SCALAR_COLUMN[r["type"]]]
 
     return {log_id: list(bucket.values()) for log_id, bucket in grouped.items()}
+
+
+def _is_empty(value):
+    return value is None or value == "" or value == []
+
+
+def save_field_values(db, log_id, category_id, values):
+    """全量替换某条日志的自定义字段值。
+
+    values 的 key 是 field_id（字符串或整数皆可），value 的形状取决于字段类型：
+    标量类型是标量，select 是 option_id，multiselect 是 option_id 列表。
+    校验失败抛 ValueError，由路由层翻译成 400。
+    """
+    fields = {
+        r["id"]: r
+        for r in db.execute(
+            "SELECT id, name, type, required FROM category_fields WHERE category_id = ?",
+            (category_id,),
+        ).fetchall()
+    }
+
+    normalized = {}
+    for raw_key, raw_value in values.items():
+        try:
+            field_id = int(raw_key)
+        except (TypeError, ValueError):
+            raise ValueError(f"非法的字段 id: {raw_key}")
+        if field_id not in fields:
+            raise ValueError(f"字段 {field_id} 不属于该分类")
+        normalized[field_id] = raw_value
+
+    for field_id, field in fields.items():
+        if field["required"] and _is_empty(normalized.get(field_id)):
+            raise ValueError(f"字段「{field['name']}」为必填")
+
+    for field_id, value in normalized.items():
+        db.execute(
+            "DELETE FROM log_field_values WHERE log_id = ? AND field_id = ?",
+            (log_id, field_id),
+        )
+        if _is_empty(value):
+            continue
+
+        field = fields[field_id]
+        ftype = field["type"]
+        if ftype == "multiselect":
+            seen = set()
+            for raw_option in value:
+                option_id = int(raw_option)
+                if option_id in seen:
+                    continue
+                seen.add(option_id)
+                db.execute(
+                    "INSERT INTO log_field_values (log_id, field_id, option_id) "
+                    "VALUES (?, ?, ?)",
+                    (log_id, field_id, option_id),
+                )
+        elif ftype == "select":
+            db.execute(
+                "INSERT INTO log_field_values (log_id, field_id, option_id) "
+                "VALUES (?, ?, ?)",
+                (log_id, field_id, int(value)),
+            )
+        elif ftype == "number":
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                raise ValueError(f"字段「{field['name']}」需要填数字")
+            db.execute(
+                "INSERT INTO log_field_values (log_id, field_id, value_num) "
+                "VALUES (?, ?, ?)",
+                (log_id, field_id, number),
+            )
+        elif ftype == "date":
+            db.execute(
+                "INSERT INTO log_field_values (log_id, field_id, value_date) "
+                "VALUES (?, ?, ?)",
+                (log_id, field_id, str(value)),
+            )
+        else:
+            db.execute(
+                "INSERT INTO log_field_values (log_id, field_id, value_text) "
+                "VALUES (?, ?, ?)",
+                (log_id, field_id, str(value)),
+            )

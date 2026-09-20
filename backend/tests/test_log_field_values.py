@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 
@@ -122,3 +124,148 @@ def test_log_without_values_returns_empty_list_while_sibling_log_does_not(
     assert empty_body["field_values"] == []
     by_name = {fv["name"]: fv for fv in filled_body["field_values"]}
     assert by_name["备注"]["value"] == "手写备注"
+
+
+def test_create_log_with_field_values(client, category, fields):
+    nike = fields["select"]["options"][0]
+    coat = fields["multiselect"]["options"][0]
+    payload = {
+        str(fields["text"]["id"]): "备注内容",
+        str(fields["number"]["id"]): 899,
+        str(fields["date"]["id"]): "2026-03-01",
+        str(fields["select"]["id"]): nike["id"],
+        str(fields["multiselect"]["id"]): [coat["id"]],
+    }
+    log = client.post(
+        "/api/logs",
+        data={
+            "category_id": category["id"],
+            "description": "新衣服",
+            "field_values": json.dumps(payload),
+        },
+    ).json()
+
+    by_name = {fv["name"]: fv for fv in log["field_values"]}
+    assert by_name["备注"]["value"] == "备注内容"
+    assert by_name["购入价格"]["value"] == 899.0
+    assert by_name["购入日期"]["value"] == "2026-03-01"
+    assert by_name["品牌"]["option_labels"] == ["Nike"]
+    assert by_name["衣服类型"]["option_labels"] == ["外套"]
+
+
+def test_update_log_replaces_field_values(client, category, fields):
+    log = client.post(
+        "/api/logs",
+        data={
+            "category_id": category["id"],
+            "description": "x",
+            "field_values": json.dumps({str(fields["text"]["id"]): "旧值"}),
+        },
+    ).json()
+
+    updated = client.put(
+        f"/api/logs/{log['id']}",
+        json={"field_values": {str(fields["text"]["id"]): "新值"}},
+    ).json()
+
+    notes = [fv for fv in updated["field_values"] if fv["name"] == "备注"]
+    assert len(notes) == 1
+    assert notes[0]["value"] == "新值"
+
+
+def test_multiselect_replace_does_not_leave_stale_rows(client, category, fields, db_conn):
+    coat, hoodie = fields["multiselect"]["options"]
+    mid = fields["multiselect"]["id"]
+    log = client.post(
+        "/api/logs",
+        data={
+            "category_id": category["id"],
+            "description": "x",
+            "field_values": json.dumps({str(mid): [coat["id"], hoodie["id"]]}),
+        },
+    ).json()
+
+    client.put(f"/api/logs/{log['id']}", json={"field_values": {str(mid): [hoodie["id"]]}})
+
+    rows = db_conn.execute(
+        "SELECT option_id FROM log_field_values WHERE log_id = ? AND field_id = ?",
+        (log["id"], mid),
+    ).fetchall()
+    assert [r["option_id"] for r in rows] == [hoodie["id"]]
+
+
+def test_duplicate_multiselect_options_are_deduped(client, category, fields, db_conn):
+    coat = fields["multiselect"]["options"][0]
+    mid = fields["multiselect"]["id"]
+    log = client.post(
+        "/api/logs",
+        data={
+            "category_id": category["id"],
+            "description": "x",
+            "field_values": json.dumps({str(mid): [coat["id"], coat["id"]]}),
+        },
+    ).json()
+
+    rows = db_conn.execute(
+        "SELECT id FROM log_field_values WHERE log_id = ? AND field_id = ?",
+        (log["id"], mid),
+    ).fetchall()
+    assert len(rows) == 1
+
+
+def test_required_field_rejects_empty_value(client, category, fields):
+    client.put(f"/api/fields/{fields['text']['id']}", json={"required": True})
+    r = client.post(
+        "/api/logs",
+        data={
+            "category_id": category["id"],
+            "description": "x",
+            "field_values": json.dumps({str(fields["text"]["id"]): ""}),
+        },
+    )
+    assert r.status_code == 400
+    assert "必填" in r.json()["detail"]
+
+
+def test_field_from_another_category_is_rejected(client, category, fields):
+    other = client.post("/api/categories", json={"name": "手套"}).json()
+    foreign = client.post(
+        f"/api/categories/{other['id']}/fields", json={"name": "线材", "type": "text"}
+    ).json()
+
+    r = client.post(
+        "/api/logs",
+        data={
+            "category_id": category["id"],
+            "description": "x",
+            "field_values": json.dumps({str(foreign["id"]): "尼龙线"}),
+        },
+    )
+    assert r.status_code == 400
+
+
+def test_number_field_rejects_non_numeric(client, category, fields):
+    r = client.post(
+        "/api/logs",
+        data={
+            "category_id": category["id"],
+            "description": "x",
+            "field_values": json.dumps({str(fields["number"]["id"]): "不是数字"}),
+        },
+    )
+    assert r.status_code == 400
+
+
+def test_empty_value_clears_the_field(client, category, fields):
+    fid = fields["text"]["id"]
+    log = client.post(
+        "/api/logs",
+        data={
+            "category_id": category["id"],
+            "description": "x",
+            "field_values": json.dumps({str(fid): "有值"}),
+        },
+    ).json()
+
+    updated = client.put(f"/api/logs/{log['id']}", json={"field_values": {str(fid): ""}}).json()
+    assert updated["field_values"] == []

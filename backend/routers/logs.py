@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+import json
 import sqlite3
 import uuid
 import os
@@ -6,7 +7,7 @@ from typing import Optional
 from database import get_db
 from models import LogOut, LogListOut, LogUpdate, StatusUpdate, ImageOut
 from thumbnail import generate_thumbnail
-from field_values import load_field_values
+from field_values import load_field_values, save_field_values
 
 router = APIRouter(prefix="/api/logs", tags=["logs"])
 
@@ -32,6 +33,13 @@ def _build_log(db: sqlite3.Connection, log_row) -> dict:
     log["images"] = [dict(i) for i in imgs]
     log["field_values"] = load_field_values(db, [log["id"]]).get(log["id"], [])
     return log
+
+
+def _apply_field_values(db, log_id: int, category_id: int, values: dict):
+    try:
+        save_field_values(db, log_id, category_id, values)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
 
 
 @router.get("", response_model=LogListOut)
@@ -77,6 +85,7 @@ async def create_log(
     description: str = Form(""),
     external_link: str = Form(""),
     files: list[UploadFile] = File(default=[]),
+    field_values: str = Form("{}"),
     db: sqlite3.Connection = Depends(get_db),
 ):
     cat = db.execute(
@@ -90,6 +99,15 @@ async def create_log(
         (category_id, description, external_link),
     )
     log_id = cur.lastrowid
+    db.commit()
+
+    try:
+        parsed_values = json.loads(field_values or "{}")
+    except json.JSONDecodeError:
+        raise HTTPException(400, "field_values 不是合法的 JSON")
+    if not isinstance(parsed_values, dict):
+        raise HTTPException(400, "field_values 必须是对象")
+    _apply_field_values(db, log_id, category_id, parsed_values)
     db.commit()
 
     os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -152,6 +170,15 @@ def update_log(
         db.execute(
             f"UPDATE logs SET {', '.join(updates)} WHERE id = ?", params
         )
+        db.commit()
+
+    if body.field_values is not None:
+        target_category = body.category_id
+        if target_category is None:
+            target_category = db.execute(
+                "SELECT category_id FROM logs WHERE id = ?", (log_id,)
+            ).fetchone()["category_id"]
+        _apply_field_values(db, log_id, target_category, body.field_values)
         db.commit()
 
     row = db.execute(
