@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from database import init_db
-from routers import categories, logs, images
+from routers import categories, logs, images, fields
 from thumbnail import migrate_existing
 
 UPLOAD_DIR = os.environ.get("UPLOAD_DIR", "/app/uploads")
@@ -14,6 +14,7 @@ app = FastAPI(title="PicLog")
 app.include_router(categories.router)
 app.include_router(logs.router)
 app.include_router(images.router)
+app.include_router(fields.router)
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
