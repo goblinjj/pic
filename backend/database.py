@@ -55,4 +55,54 @@ def init_db():
         conn.execute("ALTER TABLE logs ADD COLUMN wire TEXT DEFAULT ''")
     if "deleted_at" not in cols:
         conn.execute("ALTER TABLE logs ADD COLUMN deleted_at DATETIME DEFAULT NULL")
+    _init_custom_fields(conn)
+    conn.commit()
     conn.close()
+
+
+def _init_custom_fields(conn):
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS category_fields (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            category_id  INTEGER NOT NULL,
+            name         TEXT    NOT NULL,
+            type         TEXT    NOT NULL
+                         CHECK(type IN ('text','textarea','number','date','select','multiselect')),
+            required     INTEGER NOT NULL DEFAULT 0,
+            show_in_list INTEGER NOT NULL DEFAULT 0,
+            sort_order   INTEGER NOT NULL DEFAULT 0,
+            created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS field_options (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            field_id   INTEGER NOT NULL,
+            label      TEXT    NOT NULL,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (field_id) REFERENCES category_fields(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS log_field_values (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            log_id     INTEGER NOT NULL,
+            field_id   INTEGER NOT NULL,
+            value_text TEXT,
+            value_num  REAL,
+            value_date TEXT,
+            option_id  INTEGER,
+            FOREIGN KEY (log_id)    REFERENCES logs(id)            ON DELETE CASCADE,
+            FOREIGN KEY (field_id)  REFERENCES category_fields(id) ON DELETE CASCADE,
+            FOREIGN KEY (option_id) REFERENCES field_options(id)   ON DELETE CASCADE
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_lfv_uniq
+            ON log_field_values(log_id, field_id, COALESCE(option_id, -1));
+        CREATE INDEX IF NOT EXISTS idx_lfv_opt
+            ON log_field_values(field_id, option_id);
+        CREATE INDEX IF NOT EXISTS idx_lfv_num
+            ON log_field_values(field_id, value_num);
+        CREATE INDEX IF NOT EXISTS idx_lfv_date
+            ON log_field_values(field_id, value_date);
+    """)
