@@ -20,7 +20,7 @@ HEALTH_PATH="${PICLOG_HEALTH_PATH:-/api/categories}"
 HEALTH_PORT="${PICLOG_HEALTH_PORT:-8080}"
 HEALTH_RETRIES="${PICLOG_HEALTH_RETRIES:-20}"
 
-SSH_OPTS=(-o ConnectTimeout=15 -o BatchMode=yes)
+SSH_OPTS=(-o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=accept-new)
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
@@ -42,14 +42,14 @@ info() { printf '  %s%s%s\n' "$C_DIM" "$*" "$C_RESET"; }
 die() {
     printf '\n%s✗ %s%s\n' "$C_RED" "$*" "$C_RESET" >&2
     if [ "$PUSHED" -eq 1 ]; then
-        cat >&2 <<EOF
-
-${C_DIM}提交已经推到 GitHub，但 NAS 可能还停在旧版本——代码没丢。
-把 NAS 回滚到部署前的状态：
-
-  ssh $NAS_HOST "cd $NAS_DIR && git reset --hard $PREVIOUS_HEAD && $NAS_COMPOSE up -d --build"
-${C_RESET}
-EOF
+        printf '\n%s提交已经推到 GitHub，但 NAS 可能还停在旧版本——代码没丢。%s\n' \
+            "$C_DIM" "$C_RESET" >&2
+        if [ -n "$PREVIOUS_HEAD" ]; then
+            printf '%s把 NAS 回滚到部署前的状态：\n\n  ssh %s "cd %s && git reset --hard %s && %s up -d --build"%s\n' \
+                "$C_DIM" "$NAS_HOST" "$NAS_DIR" "$PREVIOUS_HEAD" "$NAS_COMPOSE" "$C_RESET" >&2
+        else
+            printf '%s修好问题后重跑：./scripts/deploy.sh%s\n' "$C_DIM" "$C_RESET" >&2
+        fi
     fi
     exit 1
 }
@@ -71,7 +71,7 @@ run_logged() {
 # ---------------------------------------------------------------- 分支检查
 current_branch="$(git rev-parse --abbrev-ref HEAD)"
 if [ "$current_branch" != "$BRANCH" ]; then
-    info "当前分支 $current_branch 不是 $BRANCH，跳过部署"
+    info "当前分支 ${current_branch} 不是 ${BRANCH}，跳过部署"
     exit 0
 fi
 
@@ -113,7 +113,7 @@ if ! git push --no-verify "$REMOTE" "$BRANCH" >"$push_log" 2>&1; then
     die "推送到 $REMOTE/$BRANCH 失败"
 fi
 if grep -q 'Everything up-to-date' "$push_log"; then
-    info "GitHub 已是最新（$local_head）"
+    info "GitHub 已是最新（${local_head}）"
 else
     ok "已推送 $local_head"
 fi
@@ -128,6 +128,8 @@ info "NAS 当前版本 $PREVIOUS_HEAD → 目标 $local_head"
 
 ssh "${SSH_OPTS[@]}" "$NAS_HOST" bash -s <<EOF || die "NAS 拉取或重建失败"
 set -euo pipefail
+# 非交互式 SSH 的 PATH 不含 /usr/local/bin，而 docker-compose v1 要在 PATH 上找 docker
+export PATH="/usr/local/bin:/usr/bin:/bin:\$PATH"
 cd '$NAS_DIR'
 git fetch --quiet '$REMOTE' '$BRANCH'
 git reset --hard '$REMOTE/$BRANCH'
@@ -147,7 +149,7 @@ if ! ssh "${SSH_OPTS[@]}" "$NAS_HOST" \
      echo \"最后一次响应: \${code:-无响应}\"; exit 1"
 then
     printf '\n%s最近的容器日志：%s\n' "$C_DIM" "$C_RESET" >&2
-    ssh "${SSH_OPTS[@]}" "$NAS_HOST" "cd '$NAS_DIR' && '$NAS_COMPOSE' logs --tail=30 piclog" >&2 || true
+    ssh "${SSH_OPTS[@]}" "$NAS_HOST" "export PATH=/usr/local/bin:/usr/bin:/bin:\$PATH; cd '$NAS_DIR' && '$NAS_COMPOSE' logs --tail=30 piclog" >&2 || true
     die "健康检查失败：$health_url 没有返回 200"
 fi
 ok "$health_url 返回 200"

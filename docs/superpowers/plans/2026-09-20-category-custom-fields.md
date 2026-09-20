@@ -20,6 +20,11 @@
 - 不新增任何生产运行时依赖；`pytest`/`httpx` 只进 `backend/requirements-dev.txt`，不进 `backend/requirements.txt`，不进 Dockerfile
 - 不引入前端测试框架，不引入拖拽排序库；排序一律用 `sort_order` 数字输入框
 - 前端所有请求走相对路径（`api.js` 的 `BASE = ''`），不得出现任何绝对域名
+- **Python 一律用 `backend/.venv/bin/`**（系统 python3 没装 fastapi）。环境已由
+  `./scripts/setup-dev.sh` 配好；venv 是 Python 3.14.3，生产容器是 3.12，
+  已实测 fastapi 0.115.0 + pydantic 2.13.5 在两者上行为一致
+- 提交即可，**不要执行 `git push`** —— push 会触发 pre-push hook 部署到生产 NAS。
+  部署由人在全部任务完成后手动发起
 - 日期值一律用 `'YYYY-MM-DD'` 字符串
 - 所有新建表与索引使用 `IF NOT EXISTS`，迁移必须幂等
 
@@ -194,7 +199,7 @@ def test_scalar_value_is_unique_per_log_and_field(client, db_conn):
 - [ ] **Step 4: 运行测试确认失败**
 
 ```bash
-cd backend && python3 -m pytest tests/test_migration.py -v
+cd backend && .venv/bin/pytest tests/test_migration.py -v
 ```
 
 预期：三个测试全部 FAIL（表不存在）。
@@ -265,7 +270,7 @@ def _init_custom_fields(conn):
 - [ ] **Step 6: 运行测试确认通过**
 
 ```bash
-cd backend && python3 -m pytest tests/test_migration.py -v
+cd backend && .venv/bin/pytest tests/test_migration.py -v
 ```
 
 预期：3 passed。
@@ -378,13 +383,13 @@ def test_wire_outside_glove_category_is_not_migrated(client, db_conn):
 - [ ] **Step 2: 运行测试确认失败**
 
 ```bash
-cd backend && python3 -m pytest tests/test_migration.py -v -k wire或migration_skips
+cd backend && .venv/bin/pytest tests/test_migration.py -v -k wire或migration_skips
 ```
 
 实际命令：
 
 ```bash
-cd backend && python3 -m pytest tests/test_migration.py -v
+cd backend && .venv/bin/pytest tests/test_migration.py -v
 ```
 
 预期：4 个新测试 FAIL（`category_fields` 里没有「线材」）。
@@ -453,7 +458,7 @@ def _migrate_wire_to_field(conn):
 - [ ] **Step 4: 运行测试确认通过**
 
 ```bash
-cd backend && python3 -m pytest tests/test_migration.py -v
+cd backend && .venv/bin/pytest tests/test_migration.py -v
 ```
 
 预期：7 passed。
@@ -578,7 +583,7 @@ class LogOut(BaseModel):
 - [ ] **Step 2: 确认现有测试仍然通过**
 
 ```bash
-cd backend && python3 -m pytest tests -v
+cd backend && .venv/bin/pytest tests -v
 ```
 
 预期：7 passed。（`logs.py` 此刻仍在 SELECT `wire`，但 `LogOut` 不再声明它，Pydantic 会忽略多余键。）
@@ -696,7 +701,7 @@ def test_delete_missing_field_returns_404(client):
 - [ ] **Step 2: 运行测试确认失败**
 
 ```bash
-cd backend && python3 -m pytest tests/test_fields_api.py -v
+cd backend && .venv/bin/pytest tests/test_fields_api.py -v
 ```
 
 预期：全部 FAIL（404，路由不存在）。
@@ -851,7 +856,7 @@ app.include_router(fields.router)
 - [ ] **Step 5: 运行测试确认通过**
 
 ```bash
-cd backend && python3 -m pytest tests -v
+cd backend && .venv/bin/pytest tests -v
 ```
 
 预期：15 passed。
@@ -971,7 +976,7 @@ def test_deleting_option_cascades_to_values(client, category, select_field, db_c
 - [ ] **Step 2: 运行测试确认失败**
 
 ```bash
-cd backend && python3 -m pytest tests/test_fields_api.py -v
+cd backend && .venv/bin/pytest tests/test_fields_api.py -v
 ```
 
 预期：7 个新测试 FAIL。
@@ -1091,7 +1096,7 @@ def option_usage(option_id: int, db: sqlite3.Connection = Depends(get_db)):
 - [ ] **Step 4: 运行测试确认通过**
 
 ```bash
-cd backend && python3 -m pytest tests -v
+cd backend && .venv/bin/pytest tests -v
 ```
 
 预期：22 passed。
@@ -1240,7 +1245,7 @@ def test_log_without_values_returns_empty_list(client, category, fields):
 - [ ] **Step 2: 运行测试确认失败**
 
 ```bash
-cd backend && python3 -m pytest tests/test_log_field_values.py -v
+cd backend && .venv/bin/pytest tests/test_log_field_values.py -v
 ```
 
 预期：全部 FAIL（`field_values` 键不存在或为空）。
@@ -1397,7 +1402,7 @@ def _build_log(db: sqlite3.Connection, log_row) -> dict:
 - [ ] **Step 5: 运行测试确认通过**
 
 ```bash
-cd backend && python3 -m pytest tests -v
+cd backend && .venv/bin/pytest tests -v
 ```
 
 预期：28 passed。
@@ -1578,7 +1583,7 @@ def test_empty_value_clears_the_field(client, category, fields):
 - [ ] **Step 2: 运行测试确认失败**
 
 ```bash
-cd backend && python3 -m pytest tests/test_log_field_values.py -v
+cd backend && .venv/bin/pytest tests/test_log_field_values.py -v
 ```
 
 预期：8 个新测试 FAIL。
@@ -1727,7 +1732,7 @@ def _apply_field_values(db, log_id: int, category_id: int, values: dict):
 - [ ] **Step 5: 运行测试确认通过**
 
 ```bash
-cd backend && python3 -m pytest tests -v
+cd backend && .venv/bin/pytest tests -v
 ```
 
 预期：36 passed。
@@ -1927,7 +1932,7 @@ def test_filter_total_reflects_filtered_count(client, setup):
 - [ ] **Step 2: 运行测试确认失败**
 
 ```bash
-cd backend && python3 -m pytest tests/test_log_filter_sort.py -v
+cd backend && .venv/bin/pytest tests/test_log_filter_sort.py -v
 ```
 
 预期：筛选与排序相关测试 FAIL（参数被忽略，返回全部 3 条）。
@@ -2062,7 +2067,7 @@ def list_logs(
 - [ ] **Step 5: 运行测试确认通过**
 
 ```bash
-cd backend && python3 -m pytest tests -v
+cd backend && .venv/bin/pytest tests -v
 ```
 
 预期：46 passed。
@@ -2161,7 +2166,7 @@ def test_list_preserves_category_name(client, setup):
 - [ ] **Step 2: 运行测试确认失败**
 
 ```bash
-cd backend && python3 -m pytest tests/test_log_filter_sort.py -v
+cd backend && .venv/bin/pytest tests/test_log_filter_sort.py -v
 ```
 
 预期：`test_list_only_returns_show_in_list_fields`（列表返回了全部字段）与
@@ -2218,7 +2223,7 @@ def _build_log_list(db: sqlite3.Connection, rows) -> list[dict]:
 - [ ] **Step 4: 运行测试确认通过**
 
 ```bash
-cd backend && python3 -m pytest tests -v
+cd backend && .venv/bin/pytest tests -v
 ```
 
 预期：51 passed。后端全部完成。
@@ -2242,7 +2247,7 @@ git commit -m "Batch-load list payload and limit list fields to show_in_list"
 ```bash
 # 终端 1 — 后端（务必覆盖 DB_PATH / UPLOAD_DIR，否则会写到容器路径）
 cd backend && DB_PATH=./devdata/piclog.db UPLOAD_DIR=./devuploads \
-  python3 -m uvicorn main:app --reload --port 8080
+  .venv/bin/python -m uvicorn main:app --reload --port 8080
 
 # 终端 2 — 前端，访问 http://localhost:5173
 cd frontend && npm run dev
@@ -3401,7 +3406,7 @@ cd frontend && npm run build
 - [ ] **Step 5: 全量回归**
 
 ```bash
-cd backend && python3 -m pytest tests -v
+cd backend && .venv/bin/pytest tests -v
 cd ../frontend && npm run build
 ```
 
@@ -3420,14 +3425,14 @@ git commit -m "Add custom field filters and sorting to the log list"
 
 实现完成后、部署到 NAS 之前：
 
-- [ ] `cd backend && python3 -m pytest tests -v` → 51 passed
+- [ ] `cd backend && .venv/bin/pytest tests -v` → 51 passed
 - [ ] `cd frontend && npm run build` → 成功
 - [ ] `grep -rniE "bemine|goblin\.top|192\.168" frontend/src backend` → 无输出（不得引入硬编码地址）
 - [ ] `grep -rn "wire" backend/routers backend/models.py` → 只有 `database.py` 的迁移代码提及 wire，路由与模型中不得残留
 - [ ] 用生产库的副本演练一次迁移：
   ```bash
   scp root@192.168.8.10:/volume2/homes/darlingz/pic/data/piclog.db /tmp/piclog-copy.db
-  cd backend && DB_PATH=/tmp/piclog-copy.db python3 -c "import database; database.init_db(); database.init_db()"
+  cd backend && DB_PATH=/tmp/piclog-copy.db .venv/bin/python -c "import database; database.init_db(); database.init_db()"
   sqlite3 /tmp/piclog-copy.db "SELECT f.name, v.value_text FROM log_field_values v JOIN category_fields f ON f.id = v.field_id;"
   ```
   预期输出一行：`线材|<原值>`
