@@ -18,7 +18,7 @@
     <div class="mb-4 flex gap-2 overflow-x-auto hide-scrollbar pb-1">
       <!-- Category pills -->
       <button
-        @click="filterCategory = ''; page = 1; load()"
+        @click="filterCategory = ''"
         class="shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors"
         :class="filterCategory === '' ? 'bg-primary-600 text-white shadow-sm' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'"
       >
@@ -27,7 +27,7 @@
       <button
         v-for="c in categories"
         :key="c.id"
-        @click="filterCategory = c.id; page = 1; load()"
+        @click="filterCategory = c.id"
         class="shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors"
         :class="filterCategory === c.id ? 'bg-primary-600 text-white shadow-sm' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'"
       >
@@ -233,10 +233,19 @@ const sortableFields = computed(() =>
 )
 
 watch(filterCategory, async (cid) => {
-  // 换分类就把该分类专属的筛选条件全部重置
+  // 换分类就把该分类专属的筛选条件全部重置，并由 watcher 统一负责重新加载，
+  // 避免点击分类的 handler 在 filterCategory 更新之后、watcher 刷新 state 之前
+  // 就同步跑完 load()，带着上一个分类的筛选/排序状态发请求。
   selectedOptions.value = {}
   sortValue.value = ''
-  activeFields.value = cid ? await api.getCategoryFields(cid) : []
+  page.value = 1
+  try {
+    activeFields.value = cid ? await api.getCategoryFields(cid) : []
+  } catch (e) {
+    alert(e.message)
+    activeFields.value = []
+  }
+  load()
 })
 
 function isOptionSelected(fieldId, optionId) {
