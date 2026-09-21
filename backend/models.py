@@ -39,7 +39,8 @@ class FieldOptionOut(BaseModel):
 
 class FieldOptionCreate(BaseModel):
     label: str
-    sort_order: int = 0
+    # None 表示未指定 —— 由后端排到末尾；显式 0 仍按 0 处理
+    sort_order: Optional[int] = None
 
 
 class FieldOptionUpdate(BaseModel):
@@ -52,7 +53,8 @@ class CategoryFieldCreate(BaseModel):
     type: str
     required: bool = False
     show_in_list: bool = False
-    sort_order: int = 0
+    # None 表示未指定 —— 由后端排到末尾；显式 0 仍按 0 处理
+    sort_order: Optional[int] = None
 
 
 class CategoryFieldUpdate(BaseModel):
@@ -82,6 +84,10 @@ class FieldValueOut(BaseModel):
     show_in_list: bool
     value: Any = None          # 标量值 / select 的 option_id / multiselect 的 option_id 列表
     option_labels: list[str] = []
+
+
+class MoveRequest(BaseModel):
+    direction: str
 
 
 class UsageOut(BaseModel):

@@ -58,6 +58,11 @@ export const api = {
   }),
   deleteField: (fid) => request(`/api/fields/${fid}`, { method: 'DELETE' }),
   getFieldUsage: (fid) => request(`/api/fields/${fid}/usage`),
+  moveField: (fid, direction) => request(`/api/fields/${fid}/move`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ direction }),
+  }),
 
   // Field options
   createOption: (fid, data) => request(`/api/fields/${fid}/options`, {
@@ -72,6 +77,11 @@ export const api = {
   }),
   deleteOption: (oid) => request(`/api/options/${oid}`, { method: 'DELETE' }),
   getOptionUsage: (oid) => request(`/api/options/${oid}/usage`),
+  moveOption: (oid, direction) => request(`/api/options/${oid}/move`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ direction }),
+  }),
 
   // Logs
   getLogs: (params = {}) => {

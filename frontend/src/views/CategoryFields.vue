@@ -21,12 +21,6 @@
         >
           <option v-for="t in FIELD_TYPES" :key="t.value" :value="t.value">{{ t.label }}</option>
         </select>
-        <input
-          type="text"
-          v-model.number="newField.sort_order"
-          placeholder="排序"
-          class="w-14 shrink-0 rounded-xl border border-slate-200 bg-white px-2 py-2 text-center text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
-        />
       </div>
       <div class="flex items-center gap-4">
         <label class="flex items-center gap-1.5 text-xs text-slate-600">
@@ -58,7 +52,7 @@
 
     <!-- Field list -->
     <div v-else class="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm divide-y divide-slate-100">
-      <div v-for="f in fields" :key="f.id" class="px-4 py-3">
+      <div v-for="(f, index) in fields" :key="f.id" class="px-4 py-3">
         <!-- Edit mode -->
         <form v-if="editing === f.id" @submit.prevent="saveEdit(f)" class="space-y-2">
           <div class="flex items-center gap-2">
@@ -74,11 +68,6 @@
             >
               {{ typeLabel(f.type) }}
             </span>
-            <input
-              type="text"
-              v-model.number="editForm.sort_order"
-              class="w-12 shrink-0 rounded-lg border border-slate-200 px-2 py-1.5 text-center text-sm text-slate-900 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
-            />
           </div>
           <div class="flex items-center gap-4">
             <label class="flex items-center gap-1.5 text-xs text-slate-600">
@@ -103,7 +92,7 @@
           <div class="flex items-center justify-between">
             <div class="flex min-w-0 items-center gap-2">
               <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary-50 text-xs font-bold text-primary-600">
-                {{ f.sort_order }}
+                {{ index + 1 }}
               </span>
               <span class="truncate text-sm font-medium text-slate-900">{{ f.name }}</span>
               <span class="shrink-0 rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
@@ -117,6 +106,26 @@
               </span>
             </div>
             <div class="flex shrink-0 items-center gap-1">
+              <button
+                @click="moveField(f, 'up')"
+                :disabled="index === 0"
+                title="上移"
+                class="flex h-8 w-6 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:opacity-25 disabled:hover:bg-transparent"
+              >
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
+                </svg>
+              </button>
+              <button
+                @click="moveField(f, 'down')"
+                :disabled="index === fields.length - 1"
+                title="下移"
+                class="flex h-8 w-6 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:opacity-25 disabled:hover:bg-transparent"
+              >
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                </svg>
+              </button>
               <button
                 @click="startEdit(f)"
                 class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
@@ -147,7 +156,7 @@
 
             <div v-if="expanded === f.id" class="mt-2 space-y-1.5">
               <div
-                v-for="o in f.options"
+                v-for="(o, oi) in f.options"
                 :key="o.id"
                 class="flex items-center gap-2 rounded-lg bg-slate-50 px-2.5 py-1.5"
               >
@@ -157,11 +166,6 @@
                     v-model="optionForm.label"
                     class="min-w-0 flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 focus:border-primary-400 focus:outline-none"
                   />
-                  <input
-                    type="text"
-                    v-model.number="optionForm.sort_order"
-                    class="w-10 shrink-0 rounded border border-slate-200 bg-white px-1 py-1 text-center text-xs text-slate-900 focus:border-primary-400 focus:outline-none"
-                  />
                   <button @click="saveOption(o)" class="shrink-0 rounded bg-primary-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-primary-700">
                     保存
                   </button>
@@ -170,8 +174,24 @@
                   </button>
                 </template>
                 <template v-else>
-                  <span class="w-6 shrink-0 text-[10px] text-slate-400">{{ o.sort_order }}</span>
+                  <span class="w-4 shrink-0 text-[10px] text-slate-400">{{ oi + 1 }}</span>
                   <span class="min-w-0 flex-1 truncate text-xs text-slate-700">{{ o.label }}</span>
+                  <button
+                    @click="moveOption(f, o, 'up')"
+                    :disabled="oi === 0"
+                    title="上移"
+                    class="shrink-0 px-1 text-[10px] text-slate-400 hover:text-slate-600 disabled:opacity-25"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    @click="moveOption(f, o, 'down')"
+                    :disabled="oi === f.options.length - 1"
+                    title="下移"
+                    class="shrink-0 px-1 text-[10px] text-slate-400 hover:text-slate-600 disabled:opacity-25"
+                  >
+                    ↓
+                  </button>
                   <button @click="startEditOption(o)" class="shrink-0 px-1 text-[10px] text-slate-400 hover:text-slate-600">
                     改名
                   </button>
@@ -188,12 +208,6 @@
                   placeholder="新选项名称"
                   required
                   class="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
-                />
-                <input
-                  type="text"
-                  v-model.number="newOption.sort_order"
-                  placeholder="序"
-                  class="w-10 shrink-0 rounded-lg border border-slate-200 bg-white px-1 py-1.5 text-center text-xs text-slate-900 placeholder:text-slate-400 focus:border-primary-400 focus:outline-none"
                 />
                 <button type="submit" class="shrink-0 rounded-lg bg-slate-900 px-2.5 py-1.5 text-[10px] font-medium text-white hover:bg-slate-700">
                   添加
@@ -229,12 +243,12 @@ const categoryId = Number(route.params.id)
 const categoryName = ref('')
 const fields = ref([])
 const editing = ref(null)
-const editForm = ref({ name: '', sort_order: 0, required: false, show_in_list: false })
-const newField = ref({ name: '', type: 'text', sort_order: 0, required: false, show_in_list: false })
+const editForm = ref({ name: '', required: false, show_in_list: false })
+const newField = ref({ name: '', type: 'text', required: false, show_in_list: false })
 const expanded = ref(null)
 const editingOption = ref(null)
-const optionForm = ref({ label: '', sort_order: 0 })
-const newOption = ref({ label: '', sort_order: 0 })
+const optionForm = ref({ label: '' })
+const newOption = ref({ label: '' })
 
 const shownInListCount = computed(() => fields.value.filter((f) => f.show_in_list).length)
 
@@ -250,7 +264,7 @@ function hasOptions(field) {
 function toggleOptions(fieldId) {
   expanded.value = expanded.value === fieldId ? null : fieldId
   editingOption.value = null
-  newOption.value = { label: '', sort_order: 0 }
+  newOption.value = { label: '' }
 }
 
 async function addOption(field) {
@@ -258,9 +272,8 @@ async function addOption(field) {
   try {
     await api.createOption(field.id, {
       label: newOption.value.label.trim(),
-      sort_order: newOption.value.sort_order || 0,
     })
-    newOption.value = { label: '', sort_order: 0 }
+    newOption.value = { label: '' }
     await load()
   } catch (e) {
     alert(e.message)
@@ -269,14 +282,13 @@ async function addOption(field) {
 
 function startEditOption(option) {
   editingOption.value = option.id
-  optionForm.value = { label: option.label, sort_order: option.sort_order }
+  optionForm.value = { label: option.label }
 }
 
 async function saveOption(option) {
   try {
     await api.updateOption(option.id, {
       label: optionForm.value.label.trim(),
-      sort_order: optionForm.value.sort_order,
     })
     editingOption.value = null
     await load()
@@ -315,11 +327,10 @@ async function addField() {
     await api.createField(categoryId, {
       name: newField.value.name.trim(),
       type: newField.value.type,
-      sort_order: newField.value.sort_order || 0,
       required: newField.value.required,
       show_in_list: newField.value.show_in_list,
     })
-    newField.value = { name: '', type: 'text', sort_order: 0, required: false, show_in_list: false }
+    newField.value = { name: '', type: 'text', required: false, show_in_list: false }
     await load()
   } catch (e) {
     alert(e.message)
@@ -330,7 +341,6 @@ function startEdit(f) {
   editing.value = f.id
   editForm.value = {
     name: f.name,
-    sort_order: f.sort_order,
     required: f.required,
     show_in_list: f.show_in_list,
   }
@@ -340,11 +350,28 @@ async function saveEdit(f) {
   try {
     await api.updateField(f.id, {
       name: editForm.value.name.trim(),
-      sort_order: editForm.value.sort_order,
       required: editForm.value.required,
       show_in_list: editForm.value.show_in_list,
     })
     editing.value = null
+    await load()
+  } catch (e) {
+    alert(e.message)
+  }
+}
+
+async function moveField(f, direction) {
+  try {
+    await api.moveField(f.id, direction)
+    await load()
+  } catch (e) {
+    alert(e.message)
+  }
+}
+
+async function moveOption(field, option, direction) {
+  try {
+    await api.moveOption(option.id, direction)
     await load()
   } catch (e) {
     alert(e.message)

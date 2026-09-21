@@ -211,3 +211,169 @@ def test_deleting_option_cascades_to_values(client, category, select_field, db_c
 
     assert client.delete(f"/api/options/{opt['id']}").status_code == 204
     assert db_conn.execute("SELECT id FROM log_field_values").fetchall() == []
+
+
+# --- 字段与选项的排序（move 端点） ---
+
+
+def _field_names(client, category_id):
+    return [f["name"] for f in client.get(f"/api/categories/{category_id}/fields").json()]
+
+
+def _option_labels(client, category_id, field_id):
+    fields = client.get(f"/api/categories/{category_id}/fields").json()
+    field = next(f for f in fields if f["id"] == field_id)
+    return [o["label"] for o in field["options"]]
+
+
+@pytest.fixture()
+def four_fields(client, category):
+    """四个字段，全部用默认 sort_order（都是 0），刻意复现「数值相同、靠 id 兜底」的真实情形。"""
+    names = ["品牌", "衣服类型", "购入价格", "购入日期"]
+    return [
+        client.post(
+            f"/api/categories/{category['id']}/fields", json={"name": n, "type": "text"}
+        ).json()
+        for n in names
+    ]
+
+
+def test_new_field_lands_at_the_end(client, category):
+    """已有字段的 sort_order 不为 0 时，新建字段仍须排到末尾而不是挤到最前。"""
+    client.post(
+        f"/api/categories/{category['id']}/fields",
+        json={"name": "甲", "type": "text", "sort_order": 5},
+    )
+    client.post(f"/api/categories/{category['id']}/fields", json={"name": "乙", "type": "text"})
+    client.post(f"/api/categories/{category['id']}/fields", json={"name": "丙", "type": "text"})
+    assert _field_names(client, category["id"]) == ["甲", "乙", "丙"]
+
+
+def test_move_field_up_swaps_with_previous(client, category, four_fields):
+    r = client.post(f"/api/fields/{four_fields[2]['id']}/move", json={"direction": "up"})
+    assert r.status_code == 204
+    assert _field_names(client, category["id"]) == ["品牌", "购入价格", "衣服类型", "购入日期"]
+
+
+def test_move_field_down_swaps_with_next(client, category, four_fields):
+    r = client.post(f"/api/fields/{four_fields[0]['id']}/move", json={"direction": "down"})
+    assert r.status_code == 204
+    assert _field_names(client, category["id"]) == ["衣服类型", "品牌", "购入价格", "购入日期"]
+
+
+def test_moving_first_field_up_is_a_no_op(client, category, four_fields):
+    r = client.post(f"/api/fields/{four_fields[0]['id']}/move", json={"direction": "up"})
+    assert r.status_code == 204
+    assert _field_names(client, category["id"]) == ["品牌", "衣服类型", "购入价格", "购入日期"]
+
+
+def test_moving_last_field_down_is_a_no_op(client, category, four_fields):
+    r = client.post(f"/api/fields/{four_fields[3]['id']}/move", json={"direction": "down"})
+    assert r.status_code == 204
+    assert _field_names(client, category["id"]) == ["品牌", "衣服类型", "购入价格", "购入日期"]
+
+
+def test_move_normalises_colliding_sort_orders(client, category, four_fields, db_conn):
+    """历史数据里同组 sort_order 可能全是 0（靠 id 兜底排序）。
+
+    单纯交换两个相同的值等于什么都没做，所以重排必须把整组归一化。
+    这里直接把库改回那个遗留状态，而不是依赖 create 的落位行为。
+    """
+    db_conn.execute(
+        "UPDATE category_fields SET sort_order = 0 WHERE category_id = ?", (category["id"],)
+    )
+    db_conn.commit()
+    before = [r["sort_order"] for r in db_conn.execute(
+        "SELECT sort_order FROM category_fields WHERE category_id = ? ORDER BY id",
+        (category["id"],),
+    ).fetchall()]
+    assert before == [0, 0, 0, 0], "前置条件：已把四个字段的 sort_order 都压成 0"
+
+    client.post(f"/api/fields/{four_fields[3]['id']}/move", json={"direction": "up"})
+
+    after = db_conn.execute(
+        "SELECT name, sort_order FROM category_fields WHERE category_id = ? ORDER BY sort_order, id",
+        (category["id"],),
+    ).fetchall()
+    assert [r["sort_order"] for r in after] == [0, 1, 2, 3]
+    assert [r["name"] for r in after] == ["品牌", "衣服类型", "购入日期", "购入价格"]
+
+
+def test_move_field_rejects_bad_direction(client, four_fields):
+    r = client.post(f"/api/fields/{four_fields[0]['id']}/move", json={"direction": "sideways"})
+    assert r.status_code == 400
+
+
+def test_move_missing_field_returns_404(client):
+    assert client.post("/api/fields/99999/move", json={"direction": "up"}).status_code == 404
+
+
+def test_move_field_only_touches_its_own_category(client, category, four_fields):
+    other = client.post("/api/categories", json={"name": "手套"}).json()
+    for name in ["线材", "尺码"]:
+        client.post(f"/api/categories/{other['id']}/fields", json={"name": name, "type": "text"})
+
+    client.post(f"/api/fields/{four_fields[0]['id']}/move", json={"direction": "down"})
+
+    assert _field_names(client, other["id"]) == ["线材", "尺码"]
+
+
+@pytest.fixture()
+def three_options(client, category):
+    field = client.post(
+        f"/api/categories/{category['id']}/fields", json={"name": "品牌", "type": "select"}
+    ).json()
+    options = [
+        client.post(f"/api/fields/{field['id']}/options", json={"label": l}).json()
+        for l in ["NIKE", "Adidas", "Uniqlo"]
+    ]
+    return field, options
+
+
+def test_new_option_lands_at_the_end(client, category):
+    """同上：已有选项的 sort_order 不为 0 时，新建选项仍须排到末尾。"""
+    field = client.post(
+        f"/api/categories/{category['id']}/fields", json={"name": "品牌", "type": "select"}
+    ).json()
+    client.post(f"/api/fields/{field['id']}/options", json={"label": "NIKE", "sort_order": 5})
+    client.post(f"/api/fields/{field['id']}/options", json={"label": "Adidas"})
+    client.post(f"/api/fields/{field['id']}/options", json={"label": "Uniqlo"})
+    assert _option_labels(client, category["id"], field["id"]) == ["NIKE", "Adidas", "Uniqlo"]
+
+
+def test_move_option_up_swaps_with_previous(client, category, three_options):
+    field, options = three_options
+    r = client.post(f"/api/options/{options[2]['id']}/move", json={"direction": "up"})
+    assert r.status_code == 204
+    assert _option_labels(client, category["id"], field["id"]) == ["NIKE", "Uniqlo", "Adidas"]
+
+
+def test_move_option_down_swaps_with_next(client, category, three_options):
+    field, options = three_options
+    r = client.post(f"/api/options/{options[0]['id']}/move", json={"direction": "down"})
+    assert r.status_code == 204
+    assert _option_labels(client, category["id"], field["id"]) == ["Adidas", "NIKE", "Uniqlo"]
+
+
+def test_moving_first_option_up_is_a_no_op(client, category, three_options):
+    field, options = three_options
+    r = client.post(f"/api/options/{options[0]['id']}/move", json={"direction": "up"})
+    assert r.status_code == 204
+    assert _option_labels(client, category["id"], field["id"]) == ["NIKE", "Adidas", "Uniqlo"]
+
+
+def test_move_option_only_touches_its_own_field(client, category, three_options):
+    _, options = three_options
+    other_field = client.post(
+        f"/api/categories/{category['id']}/fields", json={"name": "购买地", "type": "select"}
+    ).json()
+    for label in ["天猫", "日本代购"]:
+        client.post(f"/api/fields/{other_field['id']}/options", json={"label": label})
+
+    client.post(f"/api/options/{options[0]['id']}/move", json={"direction": "down"})
+
+    assert _option_labels(client, category["id"], other_field["id"]) == ["天猫", "日本代购"]
+
+
+def test_move_missing_option_returns_404(client):
+    assert client.post("/api/options/99999/move", json={"direction": "up"}).status_code == 404

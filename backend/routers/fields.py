@@ -11,6 +11,7 @@ from models import (
     FieldOptionUpdate,
     FieldOptionOut,
     UsageOut,
+    MoveRequest,
 )
 
 router = APIRouter(tags=["fields"])
@@ -76,12 +77,16 @@ def create_field(
     if not name:
         raise HTTPException(400, "字段名称不能为空")
 
+    sort_order = body.sort_order
+    if sort_order is None:
+        sort_order = _next_sort_order(db, "category_fields", "category_id", category_id)
+
     cur = db.execute(
         "INSERT INTO category_fields "
         "(category_id, name, type, required, show_in_list, sort_order) "
         "VALUES (?, ?, ?, ?, ?, ?)",
         (category_id, name, body.type, int(body.required),
-         int(body.show_in_list), body.sort_order),
+         int(body.show_in_list), sort_order),
     )
     db.commit()
     return _field_row_to_dict(db, _get_field_or_404(db, cur.lastrowid))
@@ -154,9 +159,13 @@ def create_option(
     if not label:
         raise HTTPException(400, "选项名称不能为空")
 
+    sort_order = body.sort_order
+    if sort_order is None:
+        sort_order = _next_sort_order(db, "field_options", "field_id", field_id)
+
     cur = db.execute(
         "INSERT INTO field_options (field_id, label, sort_order) VALUES (?, ?, ?)",
-        (field_id, label, body.sort_order),
+        (field_id, label, sort_order),
     )
     db.commit()
     return dict(_get_option_or_404(db, cur.lastrowid))
@@ -216,3 +225,62 @@ def option_usage(option_id: int, db: sqlite3.Connection = Depends(get_db)):
         (option_id,),
     ).fetchone()
     return {"log_count": row["c"]}
+
+
+MOVE_DIRECTIONS = ("up", "down")
+
+
+def _next_sort_order(db: sqlite3.Connection, table: str, key_column: str, key: int) -> int:
+    """新建的项排到末尾：取同组最大 sort_order + 1。空组返回 0。"""
+    row = db.execute(
+        f"SELECT MAX(sort_order) AS m FROM {table} WHERE {key_column} = ?", (key,)
+    ).fetchone()
+    return 0 if row["m"] is None else row["m"] + 1
+
+
+def _reorder(db: sqlite3.Connection, table: str, key_column: str, key: int,
+             item_id: int, direction: str) -> None:
+    """把 item_id 在同组内上移或下移一位，然后把整组 sort_order 重写成 0,1,2...
+
+    不是交换两个 sort_order 值——历史数据里同组的值可能全是 0（靠 id 兜底排序），
+    交换相同的值等于什么都没做。整组归一化对任何起始状态都成立，
+    并且顺手把重复值和空洞洗干净。
+    """
+    ids = [
+        r["id"]
+        for r in db.execute(
+            f"SELECT id FROM {table} WHERE {key_column} = ? ORDER BY sort_order, id", (key,)
+        ).fetchall()
+    ]
+    index = ids.index(item_id)
+    target = index - 1 if direction == "up" else index + 1
+    if 0 <= target < len(ids):
+        ids[index], ids[target] = ids[target], ids[index]
+
+    for position, row_id in enumerate(ids):
+        db.execute(f"UPDATE {table} SET sort_order = ? WHERE id = ?", (position, row_id))
+    db.commit()
+
+
+@router.post("/api/fields/{field_id}/move", status_code=204)
+def move_field(
+    field_id: int,
+    body: MoveRequest,
+    db: sqlite3.Connection = Depends(get_db),
+):
+    field = _get_field_or_404(db, field_id)
+    if body.direction not in MOVE_DIRECTIONS:
+        raise HTTPException(400, f"Invalid direction: {body.direction}")
+    _reorder(db, "category_fields", "category_id", field["category_id"], field_id, body.direction)
+
+
+@router.post("/api/options/{option_id}/move", status_code=204)
+def move_option(
+    option_id: int,
+    body: MoveRequest,
+    db: sqlite3.Connection = Depends(get_db),
+):
+    option = _get_option_or_404(db, option_id)
+    if body.direction not in MOVE_DIRECTIONS:
+        raise HTTPException(400, f"Invalid direction: {body.direction}")
+    _reorder(db, "field_options", "field_id", option["field_id"], option_id, body.direction)
