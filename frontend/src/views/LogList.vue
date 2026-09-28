@@ -1,17 +1,20 @@
 <template>
   <div>
     <!-- Search bar -->
-    <div class="relative mb-4">
-      <svg class="absolute left-3 top-1/2 h-4.5 w-4.5 -translate-y-1/2 text-slate-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-      </svg>
-      <input
-        type="text"
-        v-model="search"
-        @input="debouncedLoad"
-        placeholder="搜索日志..."
-        class="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 transition-colors focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
-      />
+    <div class="mb-4 flex gap-2">
+      <div class="relative flex-1">
+        <svg class="absolute left-3 top-1/2 h-4.5 w-4.5 -translate-y-1/2 text-slate-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+        </svg>
+        <input
+          type="text"
+          v-model="search"
+          @input="debouncedLoad"
+          placeholder="搜索日志..."
+          class="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 transition-colors focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+        />
+      </div>
+      <CameraSearchButton />
     </div>
 
     <!-- Filter pills -->
@@ -162,6 +165,7 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { api } from '../api.js'
 import LogCard from '../components/LogCard.vue'
+import CameraSearchButton from '../components/CameraSearchButton.vue'
 import EmptyState from '../components/EmptyState.vue'
 import { SEARCH_THRESHOLD, filterOptions } from '../fuzzy.js'
 

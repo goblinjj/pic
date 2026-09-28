@@ -24,7 +24,10 @@ async function request(url, options = {}) {
   if (res.status === 204) return null
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new Error(formatDetail(err.detail) || 'Request failed')
+    const error = new Error(formatDetail(err.detail) || 'Request failed')
+    // 调用方有时要按状态码区分（比如以图搜图的 503 = 功能未启用）
+    error.status = res.status
+    throw error
   }
   return res.json()
 }
@@ -119,4 +122,11 @@ export const api = {
     body: formData,
   }),
   deleteImage: (id) => request(`/api/images/${id}`, { method: 'DELETE' }),
+
+  // Image search
+  searchByImage: (file, limit = 20) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return request(`/api/search/image?limit=${limit}`, { method: 'POST', body: fd })
+  },
 }

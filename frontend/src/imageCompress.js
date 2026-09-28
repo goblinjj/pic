@@ -24,7 +24,17 @@ export function compressImages(files) {
   return Promise.all(Array.from(files, compressImage))
 }
 
-async function doCompress(file) {
+// 以图搜图用：服务端只用到 800px，缩到 1024 足够，上传也快。
+// 不走 cache（与上传用的压缩结果尺寸不同），也不看压缩开关
+const SEARCH_MAX_EDGE = 1024
+
+export function shrinkForSearch(file) {
+  const job = queue.then(() => doCompress(file, SEARCH_MAX_EDGE, 0))
+  queue = job.catch(() => {})
+  return job
+}
+
+async function doCompress(file, maxEdge = MAX_EDGE, skipBelowBytes = SKIP_BELOW_BYTES) {
   // GIF 可能是动图，SVG 是矢量图，都不处理
   if (!file.type.startsWith('image/') || file.type === 'image/gif' || file.type === 'image/svg+xml') {
     return file
@@ -37,8 +47,8 @@ async function doCompress(file) {
     return file
   }
   const { naturalWidth: w, naturalHeight: h } = img
-  const scale = Math.min(1, MAX_EDGE / Math.max(w, h))
-  if (scale === 1 && file.size < SKIP_BELOW_BYTES) return file
+  const scale = Math.min(1, maxEdge / Math.max(w, h))
+  if (scale === 1 && file.size < skipBelowBytes) return file
 
   const canvas = document.createElement('canvas')
   canvas.width = Math.round(w * scale)
