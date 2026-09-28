@@ -27,10 +27,13 @@
     <div class="mb-4 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
       <div class="mb-3 flex items-center justify-between">
         <h2 class="text-sm font-semibold text-slate-900">图片 ({{ log.images.length }})</h2>
-        <label class="cursor-pointer rounded-lg px-2.5 py-1 text-xs font-medium text-primary-600 transition-colors hover:bg-primary-50">
-          追加上传
-          <input type="file" multiple accept="image/*" @change="uploadMore" class="hidden" />
-        </label>
+        <div class="flex items-center gap-2">
+          <CompressToggle v-model="compress" />
+          <label class="cursor-pointer rounded-lg px-2.5 py-1 text-xs font-medium text-primary-600 transition-colors hover:bg-primary-50">
+            追加上传
+            <input type="file" multiple accept="image/*" @change="uploadMore" class="hidden" />
+          </label>
+        </div>
       </div>
       <div v-if="log.images.length === 0" class="py-8 text-center text-sm text-slate-400">暂无图片</div>
       <div v-else class="grid grid-cols-3 gap-2">
@@ -169,13 +172,16 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api.js'
+import { compressImages } from '../imageCompress.js'
 import PageHeader from '../components/PageHeader.vue'
 import StatusBadge from '../components/StatusBadge.vue'
+import CompressToggle from '../components/CompressToggle.vue'
 
 const route = useRoute()
 const router = useRouter()
 const log = ref(null)
 const previewImg = ref(null)
+const compress = ref(true)
 
 async function loadLog() {
   log.value = await api.getLog(route.params.id)
@@ -199,7 +205,7 @@ async function deleteLog() {
 
 async function uploadMore(e) {
   const fd = new FormData()
-  for (const f of e.target.files) {
+  for (const f of compress.value ? await compressImages(e.target.files) : e.target.files) {
     fd.append('files', f)
   }
   await api.uploadImages(log.value.id, fd)

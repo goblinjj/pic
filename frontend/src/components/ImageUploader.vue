@@ -34,8 +34,12 @@
 
 <script setup>
 import { ref, watch } from 'vue'
+import { compressImage } from '../imageCompress.js'
 
-const props = defineProps({ modelValue: { type: Array, default: () => [] } })
+const props = defineProps({
+  modelValue: { type: Array, default: () => [] },
+  compress: { type: Boolean, default: true },
+})
 const emit = defineEmits(['update:modelValue'])
 
 const previews = ref([])
@@ -44,6 +48,7 @@ const fileInput = ref(null)
 function addFiles(fileList) {
   for (const f of fileList) {
     if (!f.type.startsWith('image/')) continue
+    if (props.compress) compressImage(f) // 提前在后台压缩，提交时直接复用结果
     previews.value.push({ file: f, name: f.name, url: URL.createObjectURL(f) })
   }
   emit('update:modelValue', previews.value.map(p => p.file))

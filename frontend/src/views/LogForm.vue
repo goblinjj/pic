@@ -56,8 +56,11 @@
 
       <!-- Image upload (only for new logs) -->
       <div v-if="!isEdit">
-        <label class="mb-1.5 block text-sm font-medium text-slate-700">图片</label>
-        <ImageUploader v-model="files" />
+        <div class="mb-1.5 flex items-center justify-between">
+          <label class="text-sm font-medium text-slate-700">图片</label>
+          <CompressToggle v-model="compress" />
+        </div>
+        <ImageUploader v-model="files" :compress="compress" />
       </div>
 
       <!-- Actions -->
@@ -85,7 +88,9 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api.js'
+import { compressImages } from '../imageCompress.js'
 import ImageUploader from '../components/ImageUploader.vue'
+import CompressToggle from '../components/CompressToggle.vue'
 import PageHeader from '../components/PageHeader.vue'
 import DynamicField from '../components/DynamicField.vue'
 
@@ -95,6 +100,7 @@ const isEdit = computed(() => !!route.params.id)
 
 const categories = ref([])
 const files = ref([])
+const compress = ref(true)
 const submitting = ref(false)
 const form = ref({
   category_id: '',
@@ -235,7 +241,7 @@ async function submit() {
       fd.append('description', form.value.description)
       fd.append('external_link', form.value.external_link)
       fd.append('field_values', JSON.stringify(collectFieldValues()))
-      for (const f of files.value) {
+      for (const f of compress.value ? await compressImages(files.value) : files.value) {
         fd.append('files', f)
       }
       const log = await api.createLog(fd)
