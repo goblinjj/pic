@@ -68,8 +68,15 @@
         class="flex gap-2 overflow-x-auto hide-scrollbar pb-0.5"
       >
         <span class="shrink-0 self-center text-[11px] font-medium text-slate-400">{{ f.name }}</span>
+        <input
+          v-if="f.options.length > SEARCH_THRESHOLD"
+          v-model="optionQueries[f.id]"
+          type="search"
+          placeholder="搜索"
+          class="w-20 shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700 placeholder:text-slate-400 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+        />
         <button
-          v-for="o in f.options"
+          v-for="o in visibleOptions(f)"
           :key="o.id"
           @click="toggleOption(f.id, o.id)"
           class="shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors"
@@ -206,6 +213,7 @@ import { ref, onMounted, computed, watch } from 'vue'
 import { api } from '../api.js'
 import StatusBadge from '../components/StatusBadge.vue'
 import EmptyState from '../components/EmptyState.vue'
+import { SEARCH_THRESHOLD, filterOptions } from '../fuzzy.js'
 
 const logs = ref([])
 const categories = ref([])
@@ -219,6 +227,7 @@ const loading = ref(false)
 
 const activeFields = ref([])
 const selectedOptions = ref({})
+const optionQueries = ref({})
 const sortValue = ref('')
 
 const totalPages = computed(() => Math.ceil(total.value / size))
@@ -237,6 +246,7 @@ watch(filterCategory, async (cid) => {
   // 避免点击分类的 handler 在 filterCategory 更新之后、watcher 刷新 state 之前
   // 就同步跑完 load()，带着上一个分类的筛选/排序状态发请求。
   selectedOptions.value = {}
+  optionQueries.value = {}
   sortValue.value = ''
   page.value = 1
   try {
@@ -247,6 +257,14 @@ watch(filterCategory, async (cid) => {
   }
   load()
 })
+
+// 搜索时已选中的选项始终保留，方便取消
+function visibleOptions(field) {
+  const query = optionQueries.value[field.id]
+  if (!query) return field.options
+  const matched = new Set(filterOptions(field.options, query).map((o) => o.id))
+  return field.options.filter((o) => matched.has(o.id) || isOptionSelected(field.id, o.id))
+}
 
 function isOptionSelected(fieldId, optionId) {
   return (selectedOptions.value[fieldId] || []).includes(optionId)
