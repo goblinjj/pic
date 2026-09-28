@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.18",
+    "pinyin-pro": "^3.29.4",
     "tailwindcss": "^4.1.18",
     "vue": "^3.4.0",
     "vue-router": "^4.3.0"
