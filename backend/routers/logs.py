@@ -4,6 +4,7 @@ import sqlite3
 import uuid
 import os
 from typing import Optional
+import indexer
 from database import get_db
 from models import LogOut, LogListOut, LogUpdate, StatusUpdate, ImageOut
 from thumbnail import generate_thumbnail
@@ -173,6 +174,7 @@ async def create_log(
         raise
 
     db.commit()
+    indexer.notify()
 
     row = db.execute(
         f"SELECT {LOG_COLUMNS} FROM logs l WHERE l.id = ?", (log_id,)

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 import sqlite3
 import uuid
 import os
+import indexer
 from database import get_db
 from models import ImageOut
 from thumbnail import generate_thumbnail, delete_thumbnail
@@ -45,6 +46,7 @@ async def upload_images(
             "created_at": "",
         })
     db.commit()
+    indexer.notify()
 
     rows = db.execute(
         "SELECT id, log_id, filename, original_name, created_at FROM images WHERE log_id = ? ORDER BY id DESC LIMIT ?",

@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from database import init_db
+import indexer
 from routers import categories, logs, images, fields
 from thumbnail import migrate_existing
 
@@ -25,6 +26,7 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 def startup():
     init_db()
     migrate_existing()
+    indexer.start()
 
 
 if os.path.isdir(STATIC_DIR):

@@ -56,6 +56,7 @@ def init_db():
     if "deleted_at" not in cols:
         conn.execute("ALTER TABLE logs ADD COLUMN deleted_at DATETIME DEFAULT NULL")
     _init_custom_fields(conn)
+    _init_image_embeddings(conn)
     _run_one_time_migrations(conn)
     conn.commit()
     conn.close()
@@ -106,6 +107,20 @@ def _init_custom_fields(conn):
             ON log_field_values(field_id, value_num);
         CREATE INDEX IF NOT EXISTS idx_lfv_date
             ON log_field_values(field_id, value_date);
+    """)
+
+
+
+def _init_image_embeddings(conn):
+    # 以图搜图的特征向量，一张图一行。model 与当前模型不一致的行视为待补算
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS image_embeddings (
+            image_id   INTEGER PRIMARY KEY,
+            model      TEXT NOT NULL,
+            vector     BLOB NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE
+        );
     """)
 
 
