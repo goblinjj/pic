@@ -92,8 +92,9 @@ def set_embedder(fn) -> None: ...                           # 测试注入用
 - 文件不存在 → `available()` 为 `False`；不抛异常、不阻止应用启动
 - 懒加载 onnxruntime `InferenceSession`，全局单例；`intra_op_num_threads=2`，
   避免占满 NAS 的 4 个核
-- 预处理：转 RGB → 短边缩放到 224 并中心裁剪 224×224 → 按 ImageNet 均值/方差标准化 → NCHW
-- 取 CLS token 输出，L2 归一化
+- 预处理（与模型自带的 `preprocessor_config.json` 一致）：转 RGB → 短边双三次缩放到 256 →
+  中心裁剪 224×224 → 按 ImageNet 均值/方差标准化 → NCHW
+- 模型输入 `pixel_values`，输出 `last_hidden_state`（形状 `(1, 257, 384)`），取第 0 个 token（CLS），L2 归一化
 - 推理由一把全局锁串行化
 
 ### `backend/indexer.py` —— 后台建索引
@@ -118,12 +119,14 @@ def set_embedder(fn) -> None: ...                           # 测试注入用
 
 新路由文件 `backend/routers/search.py`。
 
-请求：multipart，字段 `file`（单张图片），查询参数 `limit`（默认 20，上限 50）。
+请求：multipart，字段 `file`（单张图片），查询参数 `limit`（默认 20，上限 50）、
+`min_score`（默认 `MIN_SCORE`，供评测脚本传 -1 取回全部分数，前端不传）。
 
 流程：
 
-1. `available()` 为 `False` → 503 `"以图搜图未启用"`
-2. 读入内存，用 Pillow 打开；失败 → 400 `"无法识别的图片"`。处理 EXIF 方向（`ImageOps.exif_transpose`）
+1. `available()` 为 `False`，或模型文件存在但加载失败（损坏） → 503 `"以图搜图未启用"`
+2. 读入内存，用 Pillow 打开；失败 → 400 `"无法识别的图片"`；像素数超过 Pillow 的
+   解压炸弹上限 → 400 `"图片尺寸过大"`。处理 EXIF 方向（`ImageOps.exif_transpose`）
 3. 缩到 800px 以内（与索引用的缩略图同尺寸），`embed()` 得到查询向量；**不落盘**
 4. 一次查询读出所有有效向量：
    `image_embeddings JOIN images JOIN logs WHERE logs.deleted_at IS NULL AND model = MODEL_ID`
@@ -163,14 +166,16 @@ Docker 镜像约增大 60MB。
 ### 入口
 
 - `LogList.vue` 搜索框右侧加相机图标按钮
-- 按钮内含隐藏的 `<input type="file" accept="image/*" capture="environment">`：
-  手机上直接打开后置相机，也可选相册；桌面端为普通文件选择
+- 按钮内含隐藏的 `<input type="file" accept="image/*">`，**不加 `capture` 属性**：
+  加了 `capture` 的话 iOS / Android 会直接进相机、无法选相册。不加时手机会弹出
+  「拍照 / 照片图库 / 文件」选择；桌面端为普通文件选择
 - 选图后把文件交给搜索页（通过一个小的模块级 store 传递 `File` 对象），跳转 `/search/image`
 
 ### 搜索页 `views/ImageSearch.vue`，路由 `/search/image`
 
 - 顶部：查询照片预览 + 「重新拍照」按钮
-- 上传前用现有 `imageCompress.js` 压缩，**强制压缩**，不读取压缩开关
+- 上传前用 `imageCompress.js` 新增的 `shrinkForSearch()` 缩到长边 1024 再上传，
+  不读取压缩开关（服务端只用到 800px）
 - 请求中：骨架屏 + 「正在识别…（约需几秒）」
 - 结果卡片：左侧为 `matched_image` 的缩略图（不一定是日志首图）；右侧沿用列表卡片的
   信息（分类、描述、状态、`show_in_list` 字段）；右上角相似度档位标签；点击进入详情
@@ -232,13 +237,17 @@ Docker 镜像约增大 60MB。
 ## 阈值评测
 
 `scripts/eval-search.py`：读取一个目录的查询照片，文件名以日志 id 开头
-（如 `37_a.jpg`、`37_b.jpg`），逐张调用搜索逻辑，输出：
+（如 `37_a.jpg`、`37_b.jpg`），逐张通过 HTTP 调用线上搜索接口（`min_score=-1`），输出：
 
 - 正确日志的排名分布（Top-1 / Top-3 / 未命中）
 - 正确匹配与错误匹配的分数分布
 
 生产库中只有 2 条日志有多张图，无法用库内数据自测。上线后由用户对 10–20 件已录入的
 物品重新拍照作为评测集，据此确定档位阈值和 `MIN_SCORE`。
+
+注意：合成图实测中，DINOv2 CLS 向量的余弦相似度整体偏高（无关图案也可达 0.9），
+上面的档位与 `MIN_SCORE` 初值很可能不合适；在评测完成前，结果以**排序**为准，
+档位标签仅供参考。
 
 ## 风险
 
