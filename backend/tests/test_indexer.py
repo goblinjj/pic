@@ -1,7 +1,10 @@
+import io
+import os
 import sqlite3
 
 import numpy as np
 import pytest
+from PIL import Image
 
 import database
 import embedding
@@ -134,3 +137,35 @@ def test_uploads_wake_the_indexer(client, log_id, monkeypatch):
     cid = client.post("/api/categories", json={"name": "衣服"}).json()["id"]
     client.post("/api/logs", data={"category_id": cid}, files=[("files", png("b.png", BLUE))])
     assert len(calls) == 2
+
+
+def _sideways_phone_jpeg_bytes():
+    exif = Image.Exif()
+    exif[0x0112] = 6
+    buf = io.BytesIO()
+    Image.new("RGB", (1600, 1200), RED).save(buf, "JPEG", exif=exif.tobytes())
+    return buf.getvalue()
+
+
+@pytest.mark.parametrize("remove_thumb", [False, True])
+def test_indexed_images_are_rotated_upright(client, log_id, remove_thumb):
+    """查询照片会按 EXIF 摆正，库里的图也必须摆正，否则同一张照片自己都搜不到自己。"""
+    import thumbnail
+
+    [image] = upload(client, log_id, ("p.jpg", _sideways_phone_jpeg_bytes(), "image/jpeg"))
+    if remove_thumb:  # 缩略图不存在时回退到原图，也要摆正
+        os.remove(os.path.join(thumbnail.THUMB_DIR, image["filename"]))
+
+    sizes = []
+
+    def recording(img):
+        sizes.append(img.size)
+        return np.ones(embedding.DIM, dtype=np.float32)
+
+    embedding.set_embedder(recording)
+    try:
+        assert indexer.process_pending() == 1
+    finally:
+        embedding.set_embedder(None)
+    width, height = sizes[0]
+    assert height > width

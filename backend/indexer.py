@@ -9,7 +9,7 @@ import os
 import sqlite3
 import threading
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 import database
 import embedding
@@ -48,7 +48,9 @@ def _open_image(filename: str) -> Image.Image:
     path = thumb if os.path.isfile(thumb) else os.path.join(UPLOAD_DIR, filename)
     img = Image.open(path)
     img.load()
-    return img
+    # 缩略图已摆正（EXIF 已去掉，这里是空操作）；回退到原图时要按 EXIF 摆正，
+    # 与查询照片保持一致
+    return ImageOps.exif_transpose(img)
 
 
 def process_pending() -> int:

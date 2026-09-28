@@ -16,20 +16,26 @@ router = APIRouter(tags=["search"])
 
 # 与缩略图尺寸一致：索引就是用 800px 缩略图算的
 QUERY_MAX_SIZE = (800, 800)
+# 前端会先缩到 1024px 再上传，正常查询只有几百 KB
+MAX_QUERY_BYTES = 20 * 1024 * 1024
 
 
 def _load_query_image(content: bytes) -> Image.Image:
     try:
         img = Image.open(io.BytesIO(content))
+        # JPEG 在解码阶段就按比例缩小，免得超大图全尺寸解码吃掉几百 MB 内存
+        img.draft("RGB", QUERY_MAX_SIZE)
         img.load()
     except Image.DecompressionBombError:
         # 不是 OSError 的子类，必须单独捕获
         raise HTTPException(400, "图片尺寸过大")
     except (UnidentifiedImageError, OSError):
         raise HTTPException(400, "无法识别的图片")
+    # 先缩小再摆正：exif_transpose 会复制整张图，在小图上做省内存。
+    # 限制框是正方形，先后顺序不影响结果
+    img.thumbnail(QUERY_MAX_SIZE)
     # 手机竖拍的照片像素是横的，靠 EXIF 标记方向；不摆正就和库里的图对不上
     img = ImageOps.exif_transpose(img)
-    img.thumbnail(QUERY_MAX_SIZE)
     return img.convert("RGB")
 
 
@@ -44,7 +50,10 @@ def search_by_image(
 ):
     if not embedding.available():
         raise HTTPException(503, "以图搜图未启用")
-    query_img = _load_query_image(file.file.read())
+    content = file.file.read(MAX_QUERY_BYTES + 1)
+    if len(content) > MAX_QUERY_BYTES:
+        raise HTTPException(413, "图片文件过大")
+    query_img = _load_query_image(content)
     try:
         vec = embedding.embed(query_img)
     except embedding.EmbeddingUnavailable:

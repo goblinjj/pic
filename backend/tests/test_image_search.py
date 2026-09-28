@@ -221,3 +221,29 @@ def test_constant_number_of_queries(client, gallery):
     many_hits, many_statements = run(-1)   # 命中全部 4 条
     assert few_hits == 1 and many_hits == 4
     assert few_statements == many_statements
+
+
+def test_large_jpeg_query_is_not_decoded_at_full_resolution(client, seen_sizes, monkeypatch):
+    """大图直接全尺寸解码会吃掉上百 MB 内存；JPEG 应在解码阶段就缩小。"""
+    from PIL import JpegImagePlugin
+
+    loaded = []
+    original_load = JpegImagePlugin.JpegImageFile.load
+
+    def spying_load(self):
+        loaded.append(self.size)
+        return original_load(self)
+
+    monkeypatch.setattr(JpegImagePlugin.JpegImageFile, "load", spying_load)
+    resp = search(client, solid_image_bytes(RED, size=(4000, 3000), fmt="JPEG"))
+    assert resp.status_code == 200
+    assert loaded and max(loaded[0]) < 4000
+    assert seen_sizes == [(800, 600)]
+
+
+def test_oversized_upload_returns_413(client, fake_embedder):
+    from routers import search as search_router
+
+    resp = search(client, b"\xff" * (search_router.MAX_QUERY_BYTES + 1))
+    assert resp.status_code == 413
+    assert resp.json()["detail"] == "图片文件过大"
