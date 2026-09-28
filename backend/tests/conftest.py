@@ -13,6 +13,10 @@ os.environ["DB_PATH"] = os.path.join(_TMP, "test.db")
 os.environ["UPLOAD_DIR"] = os.path.join(_TMP, "uploads")
 # 指向不存在的目录，让 main.py 跳过 SPA catch-all 挂载，否则 404 会被兜底路由吞掉
 os.environ["STATIC_DIR"] = os.path.join(_TMP, "no-static")
+# 默认没有模型：需要向量的测试用 fake_embedder 注入假模型
+os.environ["MODEL_PATH"] = os.path.join(_TMP, "no-model.onnx")
+# 测试里不启动后台索引线程，改为直接调用 indexer.process_pending()，避免依赖线程时序
+os.environ["INDEXER_THREAD"] = "0"
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
@@ -43,3 +47,18 @@ def db_conn():
     conn.execute("PRAGMA foreign_keys=ON")
     yield conn
     conn.close()
+
+
+@pytest.fixture()
+def fake_embedder():
+    """注入按图片平均颜色生成向量的假模型：颜色相同 = 相似度 1，红与蓝 ≈ 0。"""
+    import embedding
+    from tests.helpers import mean_color_vector
+
+    embedding.set_embedder(mean_color_vector)
+    yield
+    embedding.set_embedder(None)
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "model: 需要真实模型文件的测试（默认跳过）")
