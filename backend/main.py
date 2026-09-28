@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from database import init_db
 import indexer
-from routers import categories, logs, images, fields
+from routers import categories, logs, images, fields, search
 from thumbnail import migrate_existing
 
 UPLOAD_DIR = os.environ.get("UPLOAD_DIR", "/app/uploads")
@@ -16,6 +16,7 @@ app.include_router(categories.router)
 app.include_router(logs.router)
 app.include_router(images.router)
 app.include_router(fields.router)
+app.include_router(search.router)
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 

@@ -124,3 +124,15 @@ class LogListOut(BaseModel):
     total: int
     page: int
     size: int
+
+
+class ImageSearchHit(BaseModel):
+    log: LogOut
+    score: float
+    matched_image: ImageOut
+
+
+class ImageSearchOut(BaseModel):
+    items: list[ImageSearchHit]
+    indexed: int   # 参与比对的向量数
+    pending: int   # 还没建好索引的图片数
