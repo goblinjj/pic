@@ -43,6 +43,11 @@ cat <<'EOF'
 
 本地起开发环境：
   终端 1  cd backend && DB_PATH=./devdata/piclog.db UPLOAD_DIR=./devuploads \
+            MODEL_PATH=./devdata/models/dinov2-small.onnx \
             .venv/bin/python -m uvicorn main:app --reload --port 8080
   终端 2  cd frontend && npm run dev
+
+以图搜图的模型（约 85MB，不在 git 里）：
+  ./scripts/fetch-model.sh --local   放到本地开发目录
+  ./scripts/fetch-model.sh           上传到 NAS 并重启容器（首次上线时跑一次）
 EOF

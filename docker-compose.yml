@@ -11,3 +11,4 @@ services:
       - DB_PATH=/app/data/piclog.db
       - UPLOAD_DIR=/app/uploads
       - STATIC_DIR=/app/static
+      - MODEL_PATH=/app/data/models/dinov2-small.onnx
