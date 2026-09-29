@@ -2,6 +2,7 @@
 """用真实照片评测以图搜图，帮助确定相似度阈值。
 
 用法：
+    PICLOG_USERNAME=babelingz PICLOG_PASSWORD=... \
     backend/.venv/bin/python scripts/eval-search.py <照片目录> [--url http://192.168.8.10:8080]
 
 照片文件名以「正确答案」的日志 id 开头，如 37_a.jpg、37_side.jpg（请用 JPEG/PNG，
@@ -12,6 +13,7 @@
 和 frontend/src/imageSearch.js 的 SCORE_LEVELS。
 """
 import argparse
+import os
 import re
 import statistics
 import sys
@@ -41,6 +43,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("dir", type=Path)
     ap.add_argument("--url", default="http://192.168.8.10:8080")
+    ap.add_argument("--username", default=os.environ.get("PICLOG_USERNAME", ""))
+    ap.add_argument("--password", default=os.environ.get("PICLOG_PASSWORD", ""))
     args = ap.parse_args()
     base = args.url.rstrip("/")
 
@@ -53,6 +57,12 @@ def main():
     pending = 0
 
     with httpx.Client(timeout=120) as client:
+        # 搜索只在登录账号自己的图片里进行
+        login = client.post(
+            f"{base}/api/auth/login", json={"username": args.username, "password": args.password}
+        )
+        if login.status_code != 200:
+            sys.exit(f"登录失败：{login.status_code} {login.text}（用 PICLOG_USERNAME / PICLOG_PASSWORD 提供账号）")
         for p in photos:
             expected = expected_log_id(p)
             if expected is None:

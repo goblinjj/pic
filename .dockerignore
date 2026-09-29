@@ -9,3 +9,4 @@ data/
 uploads/
 backend/.venv
 backend/tests
+backups/

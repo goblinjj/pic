@@ -7,6 +7,8 @@ services:
       - /volume2/homes/darlingz/pic/uploads:/app/uploads
       - /volume2/homes/darlingz/pic/data:/app/data
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       - DB_PATH=/app/data/piclog.db
       - UPLOAD_DIR=/app/uploads

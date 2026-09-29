@@ -22,7 +22,7 @@ NAS_COMPOSE="${PICLOG_NAS_COMPOSE:-/usr/local/bin/docker-compose}"
 NAS_SERVICE="${PICLOG_NAS_SERVICE:-piclog}"
 DEPLOY_REF="${PICLOG_DEPLOY_REF:-refs/heads/deploy}"
 BRANCH="${PICLOG_BRANCH:-main}"
-HEALTH_PATH="${PICLOG_HEALTH_PATH:-/api/categories}"
+HEALTH_PATH="${PICLOG_HEALTH_PATH:-/api/health}"
 HEALTH_PORT="${PICLOG_HEALTH_PORT:-8080}"
 HEALTH_RETRIES="${PICLOG_HEALTH_RETRIES:-20}"
 
@@ -127,7 +127,21 @@ set -euo pipefail
 export PATH="${REMOTE_PATH}:\$PATH"
 cd '$NAS_DIR'
 git reset --hard '${DEPLOY_REF#refs/heads/}'
-'$NAS_COMPOSE' up -d --build
+# .env 是未跟踪文件，reset --hard 不会动它
+if [ ! -f .env ]; then
+    echo "缺少 $NAS_DIR/.env：参考仓库里的 .env.example 创建" >&2
+    exit 1
+fi
+'$NAS_COMPOSE' build
+if [ ! -f data/accounts.db ]; then
+    # 即将第一次迁移到多账号布局：先停容器，保证库文件一致，再整份备份
+    backup="backups/pre-multiuser-\$(date +%Y%m%d-%H%M%S)"
+    '$NAS_COMPOSE' stop '$NAS_SERVICE'
+    mkdir -p "\$backup"
+    cp -a data uploads "\$backup/"
+    echo "已备份到 $NAS_DIR/\$backup"
+fi
+'$NAS_COMPOSE' up -d
 EOF
 ok "容器已重建"
 

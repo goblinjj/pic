@@ -44,7 +44,11 @@ cat <<'EOF'
 本地起开发环境：
   终端 1  cd backend && DB_PATH=./devdata/piclog.db UPLOAD_DIR=./devuploads \
             MODEL_PATH=./devdata/models/dinov2-small.onnx \
+            INITIAL_USER_PASSWORD=devpassword1 \
+            ADMIN_PATH=dev-admin-console-000001 ADMIN_PASSWORD=devadminpass1 \
             .venv/bin/python -m uvicorn main:app --reload --port 8080
+          应用：用 babelingz / devpassword1 登录
+          后台：http://localhost:8080/dev-admin-console-000001/（admin / devadminpass1）
   终端 2  cd frontend && npm run dev
 
 以图搜图的模型（约 85MB，不在 git 里）：
