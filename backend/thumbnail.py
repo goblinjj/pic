@@ -1,8 +1,6 @@
 import os
 from PIL import Image, ImageOps
 
-UPLOAD_DIR = os.environ.get("UPLOAD_DIR", "/app/uploads")
-THUMB_DIR = os.path.join(UPLOAD_DIR, "thumbs")
 THUMB_SIZE = (800, 800)
 THUMB_QUALITY = 85
 # 标记文件：存在即表示「按 EXIF 摆正」的缩略图重建已经做过
@@ -10,15 +8,15 @@ THUMB_QUALITY = 85
 ORIENTED_MARKER = ".oriented-v1"
 
 
-def ensure_thumb_dir():
-    os.makedirs(THUMB_DIR, exist_ok=True)
+def thumb_dir(upload_dir: str) -> str:
+    return os.path.join(upload_dir, "thumbs")
 
 
-def generate_thumbnail(filename: str):
+def generate_thumbnail(upload_dir: str, filename: str):
     """Generate a thumbnail for the given filename. Skips non-image files."""
-    src = os.path.join(UPLOAD_DIR, filename)
-    dst = os.path.join(THUMB_DIR, filename)
-    ensure_thumb_dir()
+    src = os.path.join(upload_dir, filename)
+    dst = os.path.join(thumb_dir(upload_dir), filename)
+    os.makedirs(thumb_dir(upload_dir), exist_ok=True)
     try:
         with Image.open(src) as img:
             # 手机竖拍的原图像素是横的、靠 EXIF 标记方向；存 JPEG 时 EXIF 会丢，
@@ -33,9 +31,9 @@ def generate_thumbnail(filename: str):
         pass
 
 
-def delete_thumbnail(filename: str):
+def delete_thumbnail(upload_dir: str, filename: str):
     """Delete the thumbnail for the given filename if it exists."""
-    path = os.path.join(THUMB_DIR, filename)
+    path = os.path.join(thumb_dir(upload_dir), filename)
     if os.path.exists(path):
         os.remove(path)
 
@@ -48,25 +46,24 @@ def _needs_rotation(path: str) -> bool:
         return False
 
 
-def migrate_existing():
+def migrate_existing(upload_dir: str):
     """Generate thumbnails for all existing images that don't have one yet.
 
     旧版本生成缩略图时没按 EXIF 摆正：第一次启动新版本时，把带方向标记的原图
     的缩略图重建一遍，做完写标记文件，以后不再重复。
     """
-    ensure_thumb_dir()
-    if not os.path.isdir(UPLOAD_DIR):
-        return
-    marker = os.path.join(THUMB_DIR, ORIENTED_MARKER)
+    tdir = thumb_dir(upload_dir)
+    os.makedirs(tdir, exist_ok=True)
+    marker = os.path.join(tdir, ORIENTED_MARKER)
     reorient = not os.path.exists(marker)
-    for fname in os.listdir(UPLOAD_DIR):
-        src = os.path.join(UPLOAD_DIR, fname)
+    for fname in os.listdir(upload_dir):
+        src = os.path.join(upload_dir, fname)
         if not os.path.isfile(src):
             continue
-        dst = os.path.join(THUMB_DIR, fname)
+        dst = os.path.join(tdir, fname)
         if os.path.exists(dst) and not (reorient and _needs_rotation(src)):
             continue
-        generate_thumbnail(fname)
+        generate_thumbnail(upload_dir, fname)
     if reorient:
         with open(marker, "w"):
             pass
