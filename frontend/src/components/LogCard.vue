@@ -6,7 +6,7 @@
     <!-- Cover image -->
     <div v-if="cover" class="relative mb-2 overflow-hidden rounded-xl bg-slate-50">
       <img
-        :src="`/uploads/thumbs/${cover.filename}`"
+        :src="`/uploads/thumbs/${cover.filename}?v=${THUMB_VERSION}`"
         :alt="cover.original_name"
         class="w-full rounded-xl"
       />
@@ -54,6 +54,11 @@
 <script setup>
 import { computed } from 'vue'
 import StatusBadge from './StatusBadge.vue'
+
+// 缩略图重新生成过（文件名不变）时加 1：服务器没发缓存头，浏览器会按文件的
+// 旧修改时间把旧图缓存好几天，换个地址才能让所有人立刻看到新图。
+// 2 = 按 EXIF 摆正后重建（后端 thumbnail.ORIENTED_MARKER）
+const THUMB_VERSION = 2
 
 const props = defineProps({
   log: { type: Object, required: true },
