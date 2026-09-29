@@ -136,3 +136,12 @@ class ImageSearchOut(BaseModel):
     items: list[ImageSearchHit]
     indexed: int   # 参与比对的向量数
     pending: int   # 还没建好索引的图片数
+
+
+class LoginIn(BaseModel):
+    username: str
+    password: str
+
+
+class MeOut(BaseModel):
+    username: str

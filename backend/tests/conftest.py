@@ -12,7 +12,8 @@ sys.path.insert(0, str(BACKEND_DIR))
 _TMP = tempfile.mkdtemp(prefix="piclog-test-")
 os.environ["DB_PATH"] = os.path.join(_TMP, "data", "piclog.db")
 os.environ["UPLOAD_DIR"] = os.path.join(_TMP, "uploads")
-os.environ["INITIAL_USER_PASSWORD"] = "test-password-1"
+TEST_PASSWORD = "test-password-1"
+os.environ["INITIAL_USER_PASSWORD"] = TEST_PASSWORD
 os.environ.pop("ADMIN_PASSWORD", None)
 os.environ.pop("ADMIN_PATH", None)
 # 指向不存在的目录，让 main.py 跳过 SPA catch-all 挂载，否则 404 会被兜底路由吞掉
@@ -25,6 +26,8 @@ os.environ["INDEXER_THREAD"] = "0"
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
+import accounts  # noqa: E402
+import ratelimit  # noqa: E402
 import storage  # noqa: E402
 from main import app  # noqa: E402
 
@@ -34,12 +37,40 @@ def _reset_storage():
         shutil.rmtree(d, ignore_errors=True)
 
 
+def _login(c, username, password):
+    resp = c.post("/api/auth/login", json={"username": username, "password": password})
+    assert resp.status_code == 200, resp.text
+
+
 @pytest.fixture()
-def client():
+def anon_client():
     _reset_storage()
+    ratelimit.reset()
     # TestClient 进入上下文时会触发 startup，startup 里会跑 bootstrap
     with TestClient(app) as c:
         yield c
+
+
+@pytest.fixture()
+def client(anon_client):
+    """以 1 号账号 babelingz 登录的客户端。"""
+    _login(anon_client, "babelingz", TEST_PASSWORD)
+    return anon_client
+
+
+@pytest.fixture()
+def make_user(anon_client):
+    """再建一个账号，返回已登录的独立客户端（各自的 Cookie 互不干扰）。"""
+    def _make(username, password="password-2"):
+        conn = accounts.connect()
+        uid = accounts.create_user(conn, username, password)
+        conn.close()
+        storage.provision_user(uid)
+        # 不用 with：不重复触发 startup
+        c = TestClient(app)
+        _login(c, username, password)
+        return c
+    return _make
 
 
 @pytest.fixture()

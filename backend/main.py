@@ -4,12 +4,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 import bootstrap
 import indexer
-from routers import categories, logs, images, fields, search, files
+from routers import auth, categories, logs, images, fields, search, files
 
 STATIC_DIR = os.environ.get("STATIC_DIR", "/app/static")
 
 app = FastAPI(title="PicLog")
 
+app.include_router(auth.router)
 app.include_router(categories.router)
 app.include_router(logs.router)
 app.include_router(images.router)
