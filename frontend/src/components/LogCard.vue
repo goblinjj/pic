@@ -4,11 +4,33 @@
     class="mb-3 block break-inside-avoid rounded-2xl border border-slate-100 bg-white p-3 shadow-sm transition-shadow hover:shadow-md"
   >
     <!-- Cover image -->
-    <div v-if="cover" class="relative mb-2 overflow-hidden rounded-xl bg-slate-50">
+    <!-- 图片尺寸要等加载完才知道，加载前先给一个 4:3 的占位框撑出高度：
+         既有占位图可看，也让懒加载能按真实位置判断是否临近视口 -->
+    <div
+      v-if="cover"
+      class="relative mb-2 overflow-hidden rounded-xl bg-slate-100"
+      :class="{ 'aspect-[4/3]': imgState !== 'loaded' }"
+    >
+      <div
+        v-if="imgState !== 'loaded'"
+        class="absolute inset-0 flex items-center justify-center text-slate-300"
+        :class="{ 'animate-pulse': imgState === 'loading' }"
+      >
+        <svg v-if="imgState === 'loading'" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+        </svg>
+        <span v-else class="text-[10px]">图片加载失败</span>
+      </div>
       <img
+        v-show="imgState !== 'error'"
         :src="thumbUrl(cover.filename)"
         :alt="cover.original_name"
-        class="w-full rounded-xl"
+        loading="lazy"
+        decoding="async"
+        @load="imgState = 'loaded'"
+        @error="imgState = 'error'"
+        class="w-full rounded-xl transition-opacity duration-300"
+        :class="imgState === 'loaded' ? 'opacity-100' : 'absolute inset-0 h-full object-cover opacity-0'"
       />
       <span
         v-if="log.images.length > 1"
@@ -52,7 +74,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import StatusBadge from './StatusBadge.vue'
 import { thumbUrl } from '../thumbs.js'
 
@@ -63,6 +85,10 @@ const props = defineProps({
 })
 
 const cover = computed(() => props.image || props.log.images[0] || null)
+
+// loading → loaded / error；换了封面要重新走一遍
+const imgState = ref('loading')
+watch(() => cover.value?.filename, () => { imgState.value = 'loading' })
 
 function formatDate(dt) {
   if (!dt) return ''

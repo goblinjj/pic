@@ -41,21 +41,21 @@
 
       <!-- Status pills -->
       <button
-        @click="filterStatus = ''; page = 1; load()"
+        @click="filterStatus = ''; load()"
         class="shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors"
         :class="filterStatus === '' ? 'bg-slate-900 text-white shadow-sm' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'"
       >
         全部状态
       </button>
       <button
-        @click="filterStatus = 'pending'; page = 1; load()"
+        @click="filterStatus = 'pending'; load()"
         class="shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors"
         :class="filterStatus === 'pending' ? 'bg-amber-500 text-white shadow-sm' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'"
       >
         待处理
       </button>
       <button
-        @click="filterStatus = 'completed'; page = 1; load()"
+        @click="filterStatus = 'completed'; load()"
         class="shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors"
         :class="filterStatus === 'completed' ? 'bg-emerald-500 text-white shadow-sm' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'"
       >
@@ -95,7 +95,7 @@
         <span class="shrink-0 text-[11px] font-medium text-slate-400">排序</span>
         <select
           v-model="sortValue"
-          @change="page = 1; load()"
+          @change="load()"
           class="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 shadow-sm focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
         >
           <option value="">最新创建</option>
@@ -131,38 +131,34 @@
 
     <!-- Log cards — masonry -->
     <div v-else>
-      <div class="columns-2 gap-3">
-        <LogCard v-for="log in logs" :key="log.id" :log="log" />
+      <!-- 两列各自独立：CSS columns 在追加内容时会把所有卡片重新分配到两列，
+           往下加载一页整屏都会跳；按序号交替分到左右列，已有卡片位置不变 -->
+      <div class="grid grid-cols-2 items-start gap-3">
+        <div v-for="(col, ci) in columns" :key="ci">
+          <LogCard v-for="log in col" :key="log.id" :log="log" />
+        </div>
       </div>
 
-      <!-- Pagination -->
-      <div v-if="totalPages > 1" class="mt-4 flex items-center justify-center gap-4">
-        <button
-          :disabled="page <= 1"
-          @click="page--; load()"
-          class="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white"
-        >
-          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+      <!-- 触底哨兵：进入视口附近就加载下一页 -->
+      <div ref="sentinel" class="flex items-center justify-center py-6 text-xs text-slate-400">
+        <template v-if="loadingMore">
+          <svg class="mr-2 h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
           </svg>
+          加载中...
+        </template>
+        <button v-else-if="loadMoreError" @click="loadMore" class="text-primary-600">
+          加载失败，点击重试
         </button>
-        <span class="text-sm font-medium text-slate-500">{{ page }} / {{ totalPages }}</span>
-        <button
-          :disabled="page >= totalPages"
-          @click="page++; load()"
-          class="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white"
-        >
-          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-          </svg>
-        </button>
+        <span v-else-if="!hasMore">没有更多了</span>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue'
 import { api } from '../api.js'
 import LogCard from '../components/LogCard.vue'
 import CameraSearchButton from '../components/CameraSearchButton.vue'
@@ -178,13 +174,23 @@ const page = ref(1)
 const size = 20
 const total = ref(0)
 const loading = ref(false)
+const loadingMore = ref(false)
+const loadMoreError = ref(false)
+const sentinel = ref(null)
 
 const activeFields = ref([])
 const selectedOptions = ref({})
 const optionQueries = ref({})
 const sortValue = ref('')
 
-const totalPages = computed(() => Math.ceil(total.value / size))
+const hasMore = computed(() => page.value * size < total.value)
+
+// 按序号交替分到左右两列，追加新页时已有卡片不挪位置
+const columns = computed(() => {
+  const cols = [[], []]
+  logs.value.forEach((log, i) => cols[i % 2].push(log))
+  return cols
+})
 
 const optionFields = computed(() =>
   activeFields.value.filter(
@@ -202,7 +208,6 @@ watch(filterCategory, async (cid) => {
   selectedOptions.value = {}
   optionQueries.value = {}
   sortValue.value = ''
-  page.value = 1
   try {
     activeFields.value = cid ? await api.getCategoryFields(cid) : []
   } catch (e) {
@@ -237,7 +242,6 @@ function toggleOption(fieldId, optionId) {
   } else {
     selectedOptions.value = { ...selectedOptions.value, [fieldId]: current }
   }
-  page.value = 1
   load()
 }
 
@@ -252,31 +256,100 @@ function buildFvParams() {
 let debounceTimer = null
 function debouncedLoad() {
   clearTimeout(debounceTimer)
-  debounceTimer = setTimeout(() => { page.value = 1; load() }, 300)
+  debounceTimer = setTimeout(load, 300)
 }
 
+function fetchPage(p) {
+  return api.getLogs({
+    search: search.value,
+    category_id: filterCategory.value || undefined,
+    status: filterStatus.value || undefined,
+    page: p,
+    size,
+    fv: buildFvParams(),
+    sort: sortValue.value,
+  })
+}
+
+// 筛选条件一变就作废之前发出的请求：连续切换时，慢回来的旧响应
+// 不能覆盖或追加到新条件的列表里
+let requestSeq = 0
+
+// 从第一页重新加载（筛选/搜索/排序变化时调用）
 async function load() {
+  const seq = ++requestSeq
   loading.value = true
+  loadingMore.value = false
+  loadMoreError.value = false
   try {
-    const data = await api.getLogs({
-      search: search.value,
-      category_id: filterCategory.value || undefined,
-      status: filterStatus.value || undefined,
-      page: page.value,
-      size,
-      fv: buildFvParams(),
-      sort: sortValue.value,
-    })
+    const data = await fetchPage(1)
+    if (seq !== requestSeq) return
     logs.value = data.items
     total.value = data.total
+    page.value = 1
   } catch (e) {
+    if (seq !== requestSeq) return
     alert(e.message)
   } finally {
-    loading.value = false
+    if (seq === requestSeq) loading.value = false
   }
 }
 
+async function loadMore() {
+  if (loading.value || loadingMore.value || !hasMore.value) return
+  const seq = requestSeq
+  loadingMore.value = true
+  loadMoreError.value = false
+  try {
+    const data = await fetchPage(page.value + 1)
+    if (seq !== requestSeq) return
+    // 翻页期间有新建日志会让 offset 整体后移，下一页开头会和已有的重复
+    const seen = new Set(logs.value.map((l) => l.id))
+    logs.value = logs.value.concat(data.items.filter((l) => !seen.has(l.id)))
+    total.value = data.total
+    page.value += 1
+  } catch {
+    if (seq !== requestSeq) return
+    loadMoreError.value = true
+  } finally {
+    if (seq === requestSeq) {
+      loadingMore.value = false
+      // 一页不够撑满屏幕时哨兵一直在视口里，IntersectionObserver 不会再触发；
+      // 重新 observe 会立即回调一次当前状态，从而继续加载
+      rearmObserver()
+    }
+  }
+}
+
+let observer = null
+
+function rearmObserver() {
+  if (!observer || !sentinel.value || loadMoreError.value) return
+  observer.unobserve(sentinel.value)
+  observer.observe(sentinel.value)
+}
+
+// 哨兵在「加载中」时会随列表一起卸载，重新挂载后要重新 observe
+watch(sentinel, (el, prev) => {
+  if (!observer) return
+  if (prev) observer.unobserve(prev)
+  if (el) observer.observe(el)
+})
+
+onBeforeUnmount(() => {
+  observer?.disconnect()
+  clearTimeout(debounceTimer)
+})
+
 onMounted(async () => {
+  observer = new IntersectionObserver(
+    (entries) => {
+      if (entries.some((e) => e.isIntersecting)) loadMore()
+    },
+    // 离底部还有一段距离就提前加载，滑动时基本看不到等待
+    { rootMargin: '0px 0px 800px 0px' },
+  )
+  if (sentinel.value) observer.observe(sentinel.value)
   // 分类拉不回来不能连日志一起不加载：否则用户只看到「暂无日志」，
   // 对个人存档来说读起来就是「我的数据没了」
   try {
