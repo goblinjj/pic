@@ -193,13 +193,14 @@ def test_rgba_query_image_is_accepted(client, seen_sizes):
 
 def test_constant_number_of_queries(client, gallery):
     """回归护栏：SQL 语句数不随命中条数增长（同 test_log_filter_sort 的做法）。"""
-    import database
+    import deps
+    import storage
     from main import app
 
     statements = []
 
     def tracing_db():
-        conn = sqlite3.connect(database.DB_PATH, check_same_thread=False)
+        conn = sqlite3.connect(storage.user_db_path(1), check_same_thread=False)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys=ON")
         conn.set_trace_callback(statements.append)
@@ -210,11 +211,11 @@ def test_constant_number_of_queries(client, gallery):
 
     def run(min_score):
         statements.clear()
-        app.dependency_overrides[database.get_db] = tracing_db
+        app.dependency_overrides[deps.get_db] = tracing_db
         try:
             resp = search(client, solid_image_bytes(RED), min_score=min_score)
         finally:
-            app.dependency_overrides.pop(database.get_db, None)
+            app.dependency_overrides.pop(deps.get_db, None)
         return len(resp.json()["items"]), len(statements)
 
     few_hits, few_statements = run(0.9)    # 只命中红日志

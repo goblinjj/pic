@@ -5,7 +5,7 @@ import uuid
 import os
 from typing import Optional
 import indexer
-from database import get_db
+from deps import get_db, get_upload_dir
 from models import LogOut, LogListOut, LogUpdate, StatusUpdate, ImageOut
 from thumbnail import generate_thumbnail
 from field_values import (
@@ -16,8 +16,6 @@ from field_values import (
 )
 
 router = APIRouter(prefix="/api/logs", tags=["logs"])
-
-UPLOAD_DIR = os.environ.get("UPLOAD_DIR", "/app/uploads")
 
 LOG_COLUMNS = (
     "l.id, l.category_id, l.description, l.external_link, "
@@ -131,6 +129,7 @@ async def create_log(
     files: list[UploadFile] = File(default=[]),
     field_values: str = Form("{}"),
     db: sqlite3.Connection = Depends(get_db),
+    upload_dir: str = Depends(get_upload_dir),
 ):
     cat = db.execute(
         "SELECT id FROM categories WHERE id = ?", (category_id,)
@@ -154,17 +153,17 @@ async def create_log(
 
         _apply_field_values(db, log_id, category_id, parsed_values)
 
-        os.makedirs(UPLOAD_DIR, exist_ok=True)
+        os.makedirs(upload_dir, exist_ok=True)
         for f in files:
             if not f.filename:
                 continue
             ext = os.path.splitext(f.filename)[1]
             stored_name = f"{uuid.uuid4().hex}{ext}"
-            path = os.path.join(UPLOAD_DIR, stored_name)
+            path = os.path.join(upload_dir, stored_name)
             content = await f.read()
             with open(path, "wb") as out:
                 out.write(content)
-            generate_thumbnail(stored_name)
+            generate_thumbnail(upload_dir, stored_name)
             db.execute(
                 "INSERT INTO images (log_id, filename, original_name) VALUES (?, ?, ?)",
                 (log_id, stored_name, f.filename),

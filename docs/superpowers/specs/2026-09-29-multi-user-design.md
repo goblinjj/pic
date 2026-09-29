@@ -147,7 +147,9 @@ CREATE TABLE meta (
 
 - 统一提示「账号或密码错误」，不区分账号不存在还是密码错误
 - 账号已停用时也返回同样的提示
-- 限流：同一 IP 连续失败 5 次后锁定 15 分钟，锁定期间返回 429。
+- 限流：同一 IP 对同一用户名连续失败 5 次后锁定 15 分钟（管理员登录按 IP），锁定期间返回 429。
+  按 (IP, 用户名) 计数是因为 Docker 端口映射可能让所有客户端显示为同一网关 IP，
+  只按 IP 会一人输错锁住所有人。
   计数只保存在进程内存里，登录成功后清零
 
 ## 请求隔离
@@ -168,8 +170,8 @@ CREATE TABLE meta (
 
 - 移除 `app.mount("/uploads", StaticFiles(...))`
 - 新增 `GET /api/files/{filename}` 与 `GET /api/files/thumbs/{filename}`：需要登录，
-  只从当前用户的目录读取。文件名必须匹配 `^[0-9a-f]{32}(\.[A-Za-z0-9]{1,10})?$`，
-  否则返回 404，杜绝路径穿越
+  只从当前用户的目录读取。文件名必须等于当前用户库 `images.filename` 中登记过的某一项
+  （且不含路径分隔），否则返回 404。旧数据的扩展名来自原始文件名、格式不统一，所以不用正则
 - 响应头 `Cache-Control: private, max-age=31536000`：文件名是 uuid，内容不会变
 - 前端 `thumbs.js` 改为 `/api/files/thumbs/<name>?v=`，`LogDetail.vue` 的原图改为
   `/api/files/<name>`

@@ -230,13 +230,14 @@ def test_list_issues_constant_number_of_queries(client, setup):
     C 扩展类型，赋值会抛 TypeError。改用依赖覆盖注入一个开了 trace 的连接。
     """
     import sqlite3
-    import database
+    import deps
+    import storage
     from main import app
 
     statements = []
 
     def tracing_db():
-        conn = sqlite3.connect(database.DB_PATH, check_same_thread=False)
+        conn = sqlite3.connect(storage.user_db_path(1), check_same_thread=False)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys=ON")
         conn.set_trace_callback(statements.append)
@@ -247,14 +248,14 @@ def test_list_issues_constant_number_of_queries(client, setup):
 
     def run_traced_list():
         statements.clear()
-        app.dependency_overrides[database.get_db] = tracing_db
+        app.dependency_overrides[deps.get_db] = tracing_db
         try:
             client.get(
                 "/api/logs",
                 params={"category_id": setup["category"]["id"], "size": 50},
             )
         finally:
-            app.dependency_overrides.pop(database.get_db, None)
+            app.dependency_overrides.pop(deps.get_db, None)
         return list(statements)
 
     first_run = run_traced_list()

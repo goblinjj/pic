@@ -1,4 +1,5 @@
 import database
+import storage
 
 
 def test_custom_field_tables_exist(client, db_conn):
@@ -82,7 +83,7 @@ def _wire_field_id(db_conn, cat_id):
 
 def test_wire_migrates_into_glove_field(client, db_conn):
     cat_id, log_id = _seed_glove_log_with_wire(db_conn)
-    database.init_db()
+    database.init_db(storage.user_db_path(1))
 
     field = db_conn.execute(
         "SELECT id, type, sort_order FROM category_fields "
@@ -101,9 +102,9 @@ def test_wire_migrates_into_glove_field(client, db_conn):
 
 def test_wire_migration_is_idempotent(client, db_conn):
     cat_id, log_id = _seed_glove_log_with_wire(db_conn)
-    database.init_db()
-    database.init_db()
-    database.init_db()
+    database.init_db(storage.user_db_path(1))
+    database.init_db(storage.user_db_path(1))
+    database.init_db(storage.user_db_path(1))
 
     fields = db_conn.execute(
         "SELECT id FROM category_fields WHERE category_id = ? AND name = '线材'",
@@ -119,7 +120,7 @@ def test_wire_migration_is_idempotent(client, db_conn):
 
 def test_migration_skips_when_no_glove_category(client, db_conn):
     client.post("/api/categories", json={"name": "欢欢衣服"})
-    database.init_db()
+    database.init_db(storage.user_db_path(1))
 
     cats = db_conn.execute("SELECT name FROM categories").fetchall()
     assert [c["name"] for c in cats] == ["欢欢衣服"]
@@ -139,7 +140,7 @@ def test_wire_outside_glove_category_is_not_migrated(client, db_conn):
     other_log_id = cur.lastrowid
     db_conn.commit()
 
-    database.init_db()
+    database.init_db(storage.user_db_path(1))
 
     values = db_conn.execute(
         "SELECT id FROM log_field_values WHERE log_id = ?", (other_log_id,)
@@ -150,7 +151,7 @@ def test_wire_outside_glove_category_is_not_migrated(client, db_conn):
 def test_cleared_wire_value_stays_cleared_across_restarts(client, db_conn):
     """用户在编辑页清空线材 → 重启不能把旧值再写回来。"""
     cat_id, log_id = _seed_glove_log_with_wire(db_conn)
-    database.init_db()
+    database.init_db(storage.user_db_path(1))
     field_id = _wire_field_id(db_conn, cat_id)
     assert field_id is not None
 
@@ -161,7 +162,7 @@ def test_cleared_wire_value_stays_cleared_across_restarts(client, db_conn):
     )
     db_conn.commit()
 
-    database.init_db()  # 下一次启动
+    database.init_db(storage.user_db_path(1))  # 下一次启动
 
     values = db_conn.execute(
         "SELECT id FROM log_field_values WHERE log_id = ? AND field_id = ?",
@@ -173,14 +174,14 @@ def test_cleared_wire_value_stays_cleared_across_restarts(client, db_conn):
 def test_deleted_wire_field_stays_deleted_across_restarts(client, db_conn):
     """用户在字段管理里删掉线材字段 → 重启不能把字段和值再造回来。"""
     cat_id, log_id = _seed_glove_log_with_wire(db_conn)
-    database.init_db()
+    database.init_db(storage.user_db_path(1))
     field_id = _wire_field_id(db_conn, cat_id)
     assert field_id is not None
 
     db_conn.execute("DELETE FROM category_fields WHERE id = ?", (field_id,))
     db_conn.commit()
 
-    database.init_db()  # 下一次启动
+    database.init_db(storage.user_db_path(1))  # 下一次启动
 
     fields = db_conn.execute(
         "SELECT id FROM category_fields WHERE category_id = ? AND name = '线材'",
@@ -206,7 +207,7 @@ def test_empty_new_database_is_marked_so_migration_never_lurks(client, db_conn):
     )
     db_conn.commit()
 
-    database.init_db()
+    database.init_db(storage.user_db_path(1))
 
     fields = db_conn.execute(
         "SELECT id FROM category_fields WHERE category_id = ?", (cat["id"],)

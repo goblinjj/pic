@@ -7,7 +7,7 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 
 import embedding
 import indexer
-from database import get_db
+from deps import current_user_id, get_db
 from image_search import MIN_SCORE, rank_logs
 from models import ImageSearchOut
 from routers.logs import LOG_COLUMNS, _build_log_list
@@ -47,6 +47,7 @@ def search_by_image(
     # 评测脚本传 -1 取回全部分数；前端不传
     min_score: float = Query(MIN_SCORE, ge=-1.0, le=1.0),
     db: sqlite3.Connection = Depends(get_db),
+    user_id: int = Depends(current_user_id),
 ):
     if not embedding.available():
         raise HTTPException(503, "以图搜图未启用")
@@ -76,4 +77,4 @@ def search_by_image(
                 continue
             items.append({"log": log, "score": round(hit.score, 4), "matched_image": image})
 
-    return {"items": items, "indexed": indexed, "pending": indexer.count_pending(db)}
+    return {"items": items, "indexed": indexed, "pending": indexer.count_pending(db, user_id)}

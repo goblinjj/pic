@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 import sqlite3
-from database import get_db
+from deps import get_db
 from models import (
     FIELD_TYPES,
     OPTION_TYPES,

@@ -11,16 +11,18 @@ import threading
 
 from PIL import Image, ImageOps
 
-import database
+import accounts
 import embedding
-from thumbnail import THUMB_DIR, UPLOAD_DIR
+import storage
+import thumbnail
 
 log = logging.getLogger("piclog.indexer")
 
 _wake = threading.Event()
 _thread = None
-# 解码失败的 image_id（非图片、文件损坏）。只记在内存里：重启后会再试一次
-_failed: set[int] = set()
+# 解码失败的 (user_id, image_id)（非图片、文件损坏）。各账号的库 id 会重复，所以带上 user_id。
+# 只记在内存里：重启后会再试一次
+_failed: set[tuple[int, int]] = set()
 
 _MISSING_SQL = """
     SELECT i.id, i.filename
@@ -32,20 +34,20 @@ _MISSING_SQL = """
 """
 
 
-def _missing(conn) -> list[tuple[int, str]]:
+def _missing(conn, user_id: int) -> list[tuple[int, str]]:
     rows = conn.execute(_MISSING_SQL, (embedding.MODEL_ID,)).fetchall()
-    return [(r[0], r[1]) for r in rows if r[0] not in _failed]
+    return [(r[0], r[1]) for r in rows if (user_id, r[0]) not in _failed]
 
 
-def count_pending(conn) -> int:
+def count_pending(conn, user_id: int) -> int:
     """属于有效日志、还没有当前模型向量、且没有解码失败过的图片数。"""
-    return len(_missing(conn))
+    return len(_missing(conn, user_id))
 
 
-def _open_image(filename: str) -> Image.Image:
+def _open_image(upload_dir: str, filename: str) -> Image.Image:
     # 优先用 800px 缩略图：解码快得多，模型输入只有 224px，效果没有差别
-    thumb = os.path.join(THUMB_DIR, filename)
-    path = thumb if os.path.isfile(thumb) else os.path.join(UPLOAD_DIR, filename)
+    thumb = os.path.join(thumbnail.thumb_dir(upload_dir), filename)
+    path = thumb if os.path.isfile(thumb) else os.path.join(upload_dir, filename)
     img = Image.open(path)
     img.load()
     # 缩略图已摆正（EXIF 已去掉，这里是空操作）；回退到原图时要按 EXIF 摆正，
@@ -53,24 +55,23 @@ def _open_image(filename: str) -> Image.Image:
     return ImageOps.exif_transpose(img)
 
 
-def process_pending() -> int:
-    """补算所有缺向量的图片，返回本次写入的条数。每张图单独提交。"""
-    if not embedding.available():
-        return 0
-    conn = sqlite3.connect(database.DB_PATH)
+def _process_user(user_id: int) -> tuple[int, bool]:
+    """补算一个账号缺向量的图片。返回 (写入条数, 是否因模型不可用而中止)。"""
+    upload_dir = storage.user_upload_dir(user_id)
+    conn = sqlite3.connect(storage.user_db_path(user_id))
     conn.execute("PRAGMA foreign_keys=ON")
     done = 0
     try:
-        for image_id, filename in _missing(conn):
+        for image_id, filename in _missing(conn, user_id):
             try:
-                img = _open_image(filename)
+                img = _open_image(upload_dir, filename)
                 vec = embedding.embed(img)
             except embedding.EmbeddingUnavailable:
                 log.exception("模型不可用，停止本轮补算")
-                return done
+                return done, True
             except Exception:
-                log.warning("图片 %s（%s）无法解码，跳过", image_id, filename)
-                _failed.add(image_id)
+                log.warning("用户 %s 的图片 %s（%s）无法解码，跳过", user_id, image_id, filename)
+                _failed.add((user_id, image_id))
                 continue
             # 推理要好几秒，这期间图片可能已被删除：只在 images 行还在时写入，
             # 否则外键约束会让 INSERT 报错
@@ -83,7 +84,37 @@ def process_pending() -> int:
             done += cur.rowcount
     finally:
         conn.close()
-    return done
+    return done, False
+
+
+def process_pending() -> int:
+    """依次为每个启用账号补算缺向量的图片，返回本次写入的总条数。
+
+    只有一个线程、账号串行处理：NAS 的 CPU 扛不住并发推理。
+    停用账号跳过，重新启用后下一轮自然补上。
+    """
+    if not embedding.available():
+        return 0
+    conn = accounts.connect()
+    try:
+        user_ids = accounts.active_user_ids(conn)
+    finally:
+        conn.close()
+    total = 0
+    for uid in user_ids:
+        if not os.path.isfile(storage.user_db_path(uid)):
+            log.warning("用户 %s 的库不存在，跳过", uid)
+            continue
+        try:
+            done, stopped = _process_user(uid)
+        except Exception:
+            # 一个账号的库坏了不能拖累其他账号
+            log.exception("用户 %s 建立索引失败，跳过", uid)
+            continue
+        total += done
+        if stopped:
+            break
+    return total
 
 
 def notify():

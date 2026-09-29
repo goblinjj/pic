@@ -2,12 +2,10 @@ import os
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from database import init_db
+import bootstrap
 import indexer
-from routers import categories, logs, images, fields, search
-from thumbnail import migrate_existing
+from routers import categories, logs, images, fields, search, files
 
-UPLOAD_DIR = os.environ.get("UPLOAD_DIR", "/app/uploads")
 STATIC_DIR = os.environ.get("STATIC_DIR", "/app/static")
 
 app = FastAPI(title="PicLog")
@@ -17,16 +15,12 @@ app.include_router(logs.router)
 app.include_router(images.router)
 app.include_router(fields.router)
 app.include_router(search.router)
-
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-
-app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+app.include_router(files.router)
 
 
 @app.on_event("startup")
 def startup():
-    init_db()
-    migrate_existing()
+    bootstrap.run()
     indexer.start()
 
 
