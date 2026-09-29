@@ -234,7 +234,10 @@ async function submit() {
         external_link: form.value.external_link,
         field_values: collectFieldValues(),
       })
-      router.push(`/logs/${route.params.id}`)
+      // 从详情卡片进来的就退回去，不再压一层详情，否则关卡片会回到编辑页
+      const detailPath = `/logs/${route.params.id}`
+      if (window.history.state?.back === detailPath) router.back()
+      else router.replace(detailPath)
     } else {
       const fd = new FormData()
       fd.append('category_id', form.value.category_id)
@@ -245,7 +248,8 @@ async function submit() {
         fd.append('files', f)
       }
       const log = await api.createLog(fd)
-      router.push(`/logs/${log.id}`)
+      // 用 replace 把新建页换掉：关掉详情卡片直接回列表，而不是回到填好的表单
+      router.replace(`/logs/${log.id}`)
     }
   } catch (e) {
     alert(e.message)

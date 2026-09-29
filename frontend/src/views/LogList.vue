@@ -154,11 +154,19 @@
         <span v-else-if="!hasMore">没有更多了</span>
       </div>
     </div>
+
+    <!-- 详情卡片（子路由）盖在列表上 -->
+    <router-view v-slot="{ Component, route: r }">
+      <Transition name="sheet" :duration="250" appear>
+        <component :is="Component" :key="r.params.id" />
+      </Transition>
+    </router-view>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, onActivated, computed, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { api } from '../api.js'
 import LogCard from '../components/LogCard.vue'
 import CameraSearchButton from '../components/CameraSearchButton.vue'
@@ -185,10 +193,15 @@ const sortValue = ref('')
 
 const hasMore = computed(() => page.value * size < total.value)
 
-// 按序号交替分到左右两列，追加新页时已有卡片不挪位置
+// 按出现顺序交替分到左右两列，并记住每条落在哪列：追加新页、在卡片里
+// 删掉一条时，其余卡片都不换列。重新加载（load）时清空重排
+let columnOf = new Map()
 const columns = computed(() => {
   const cols = [[], []]
-  logs.value.forEach((log, i) => cols[i % 2].push(log))
+  for (const log of logs.value) {
+    if (!columnOf.has(log.id)) columnOf.set(log.id, columnOf.size % 2)
+    cols[columnOf.get(log.id)].push(log)
+  }
   return cols
 })
 
@@ -284,6 +297,7 @@ async function load() {
   try {
     const data = await fetchPage(1)
     if (seq !== requestSeq) return
+    columnOf = new Map()
     logs.value = data.items
     total.value = data.total
     page.value = 1
@@ -336,9 +350,47 @@ watch(sentinel, (el, prev) => {
   if (el) observer.observe(el)
 })
 
+// 详情卡片关掉后只刷新那一条：状态、编辑、删除都在卡片里（或编辑页）做，
+// 整页重载会丢掉滚动进度。筛选条件不再匹配的也原地保留，免得卡片一关列表就跳
+async function refreshItem(id) {
+  const index = logs.value.findIndex((l) => String(l.id) === String(id))
+  if (index === -1) return
+  try {
+    const log = await api.getLog(id)
+    const i = logs.value.findIndex((l) => l.id === log.id)
+    if (i === -1) return
+    // 详情接口返回全部字段，卡片上只显示勾了「列表显示」的
+    const next = { ...log, field_values: log.field_values.filter((fv) => fv.show_in_list) }
+    logs.value = logs.value.map((l, k) => (k === i ? next : l))
+  } catch (e) {
+    if (e.status !== 404) return
+    logs.value = logs.value.filter((l) => String(l.id) !== String(id))
+    total.value = Math.max(0, total.value - 1)
+  }
+}
+
+const router = useRouter()
+const removeAfterEach = router.afterEach((to, from, failure) => {
+  if (failure) return
+  if (from.name === 'LogDetail' && to.name === 'LogList') refreshItem(from.params.id)
+  // 新建完会直接打开新日志的卡片，列表得重载才会出现在最前面
+  if (from.name === 'LogCreate' && to.matched[0]?.name === 'LogList') load()
+})
+
+onActivated(async () => {
+  // keep-alive 下 onMounted 只跑一次；从分类页回来时分类可能增删过
+  rearmObserver()
+  try {
+    categories.value = await api.getCategories()
+  } catch {
+    // 拉不到就沿用旧的，不打断浏览
+  }
+})
+
 onBeforeUnmount(() => {
   observer?.disconnect()
   clearTimeout(debounceTimer)
+  removeAfterEach()
 })
 
 onMounted(async () => {
@@ -360,3 +412,29 @@ onMounted(async () => {
   load()
 })
 </script>
+
+<style scoped>
+/* 遮罩淡入，卡片从底部滑上来（桌面端居中卡片同样适用） */
+.sheet-enter-active,
+.sheet-leave-active {
+  transition: opacity 0.25s ease;
+}
+.sheet-enter-from,
+.sheet-leave-to {
+  opacity: 0;
+}
+.sheet-enter-active :deep(.sheet-panel),
+.sheet-leave-active :deep(.sheet-panel) {
+  transition: transform 0.25s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.sheet-enter-from :deep(.sheet-panel),
+.sheet-leave-to :deep(.sheet-panel) {
+  transform: translateY(100%);
+}
+@media (min-width: 640px) {
+  .sheet-enter-from :deep(.sheet-panel),
+  .sheet-leave-to :deep(.sheet-panel) {
+    transform: translateY(24px) scale(0.98);
+  }
+}
+</style>

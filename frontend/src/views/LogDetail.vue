@@ -1,28 +1,49 @@
 <template>
-  <div v-if="log">
-    <PageHeader :title="`#${log.id} ${log.category_name}`" back>
-      <template #actions>
+  <!-- 以卡片形式盖在列表上：手机端从底部弹出，桌面端居中。点遮罩、按返回键都能关 -->
+  <div
+    class="fixed inset-0 z-[55] flex items-end justify-center bg-black/40 sm:items-center sm:p-6"
+    @click.self="close"
+  >
+    <div class="sheet-panel flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl bg-slate-50 shadow-xl sm:max-h-[88vh] sm:rounded-3xl">
+      <!-- Header -->
+      <div class="shrink-0 border-b border-slate-100 bg-white px-4 pb-2.5 pt-2">
+        <div class="mx-auto mb-2 h-1 w-10 rounded-full bg-slate-200 sm:hidden" />
         <div class="flex items-center gap-1.5">
-          <router-link
-            :to="`/logs/${log.id}/edit`"
+          <h1 class="flex-1 truncate text-lg font-bold text-slate-900">
+            {{ log ? `#${log.id} ${log.category_name}` : '日志详情' }}
+          </h1>
+          <template v-if="log">
+            <router-link
+              :to="`/logs/${log.id}/edit`"
+              class="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            >
+              <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+              </svg>
+            </router-link>
+            <button
+              @click="deleteLog"
+              class="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500"
+            >
+              <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+              </svg>
+            </button>
+          </template>
+          <button
+            @click="close"
             class="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
           >
-            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
-            </svg>
-          </router-link>
-          <button
-            @click="deleteLog"
-            class="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500"
-          >
-            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
-      </template>
-    </PageHeader>
+      </div>
 
+      <!-- Body -->
+      <div class="flex-1 overflow-y-auto overscroll-contain p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+        <div v-if="log">
     <!-- Image gallery -->
     <div class="mb-4 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
       <div class="mb-3 flex items-center justify-between">
@@ -155,24 +176,27 @@
         </div>
       </Transition>
     </Teleport>
-  </div>
+        </div>
 
-  <!-- Loading state -->
-  <div v-else class="flex items-center justify-center py-24 text-sm text-slate-400">
-    <svg class="mr-2 h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-    </svg>
-    加载中...
+        <!-- Loading / error state -->
+        <div v-else-if="loadError" class="py-24 text-center text-sm text-slate-400">{{ loadError }}</div>
+        <div v-else class="flex items-center justify-center py-24 text-sm text-slate-400">
+          <svg class="mr-2 h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+          </svg>
+          加载中...
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api.js'
 import { compressImages } from '../imageCompress.js'
-import PageHeader from '../components/PageHeader.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import CompressToggle from '../components/CompressToggle.vue'
 import PhotoSourceSheet from '../components/PhotoSourceSheet.vue'
@@ -184,9 +208,21 @@ const log = ref(null)
 const previewImg = ref(null)
 const compress = ref(true)
 const sheet = ref(null)
+const loadError = ref('')
 
 async function loadLog() {
-  log.value = await api.getLog(route.params.id)
+  try {
+    log.value = await api.getLog(route.params.id)
+  } catch (e) {
+    loadError.value = e.status === 404 ? '日志不存在或已删除' : e.message
+  }
+}
+
+// 从列表点进来的就退回去（Android 返回键、微信返回手势走的也是这条路），
+// 直接打开链接进来的没有上一页，换成列表
+function close() {
+  if (window.history.state?.back) router.back()
+  else router.replace('/')
 }
 
 function formatDate(dt) {
@@ -202,7 +238,7 @@ async function toggleStatus() {
 async function deleteLog() {
   if (!confirm('确定删除此日志？所有图片将被一起删除。')) return
   await api.deleteLog(log.value.id)
-  router.push('/')
+  close()
 }
 
 async function uploadMore(files) {
@@ -224,7 +260,20 @@ function openPreview(img) {
   previewImg.value = img
 }
 
-onMounted(loadLog)
+function onKeydown(e) {
+  if (e.key === 'Escape' && !previewImg.value) close()
+}
+
+// 卡片打开期间锁住底下列表的滚动，关掉后列表停在原处
+onMounted(() => {
+  document.documentElement.style.overflow = 'hidden'
+  window.addEventListener('keydown', onKeydown)
+  loadLog()
+})
+onUnmounted(() => {
+  document.documentElement.style.overflow = ''
+  window.removeEventListener('keydown', onKeydown)
+})
 </script>
 
 <style scoped>
