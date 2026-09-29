@@ -54,7 +54,7 @@ def test_create_and_authenticate(conn):
     assert accounts.authenticate(conn, "nobody", "password-1") is None
 
 
-@pytest.mark.parametrize("username", ["ab", "Alice", "a-b", "a" * 33, "中文名", ""])
+@pytest.mark.parametrize("username", ["a", "张", "张三\n", "Alice", "a-b", "张 三", "张三！", "a" * 33, ""])
 def test_invalid_username_rejected(conn, username):
     with pytest.raises(ValueError):
         accounts.create_user(conn, username, "password-1")
@@ -64,6 +64,12 @@ def test_invalid_username_rejected(conn, username):
 def test_invalid_password_rejected(conn, password):
     with pytest.raises(ValueError):
         accounts.create_user(conn, "alice", password)
+
+
+@pytest.mark.parametrize("username", ["张三", "小王_2", "ab", "abc", "a" * 32])
+def test_chinese_and_short_usernames_accepted(conn, username):
+    uid = accounts.create_user(conn, username, "password-1")
+    assert accounts.authenticate(conn, username, "password-1")["id"] == uid
 
 
 def test_duplicate_username(conn):

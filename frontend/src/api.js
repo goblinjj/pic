@@ -26,7 +26,8 @@ async function request(url, options = {}) {
   if (currentUser.value) {
     // 告诉后端「这个页面以为自己是谁」：别的标签页切换账号后，这里的旧页面发出的
     // 请求会被拒绝（401 → 回登录页），而不是写进新账号的同号记录
-    fetchOptions.headers = { ...fetchOptions.headers, 'X-PicLog-User': currentUser.value }
+    // 请求头只能是 ASCII，中文用户名必须编码，否则 fetch 直接抛错
+    fetchOptions.headers = { ...fetchOptions.headers, 'X-PicLog-User': encodeURIComponent(currentUser.value) }
   }
   const res = await fetch(BASE + url, fetchOptions)
   if (res.status === 401 && !noAuthRedirect) {

@@ -147,3 +147,14 @@ def test_matching_user_header_is_accepted(client):
         "/api/categories", json={"name": "x"}, headers={"X-PicLog-User": "babelingz"}
     )
     assert resp.status_code == 201
+
+
+def test_chinese_username_login_and_header(anon_client, make_user):
+    from urllib.parse import quote
+    c = make_user("张三")
+    assert c.get("/api/auth/me").json() == {"username": "张三"}
+    # 前端把用户名 URL 编码后放进请求头（请求头只能是 ASCII）
+    ok = c.post("/api/categories", json={"name": "x"}, headers={"X-PicLog-User": quote("张三")})
+    assert ok.status_code == 201
+    bad = c.post("/api/categories", json={"name": "y"}, headers={"X-PicLog-User": quote("李四")})
+    assert bad.status_code == 401

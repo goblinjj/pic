@@ -212,7 +212,7 @@ Cookie `piclog_admin`：Path=`/{ADMIN_PATH}`、HttpOnly、SameSite=Strict、有�
 
 ### 校验
 
-- 用户名：`^[a-z0-9_]{3,32}$`，唯一，重复时返回 409
+- 用户名：`^[\u4e00-\u9fffa-z0-9_]{2,32}$`（常用汉字、小写字母、数字、下划线），唯一，重复时返回 409。请求头 `X-PicLog-User` 中的用户名需 URL 编码
 - 密码：至少 8 个字符，最多 128 个字符
 
 ### 页面

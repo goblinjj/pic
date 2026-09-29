@@ -5,6 +5,7 @@
 """
 import logging
 import os
+from urllib.parse import unquote
 
 from fastapi import Depends, HTTPException, Request, Response
 
@@ -49,8 +50,9 @@ def current_user(request: Request, response: Response):
     # 前端每个请求都带上「我以为自己是谁」。同一浏览器里另一个标签页换了账号后，
     # 这个旧标签页的 Cookie 已经是新账号的了，而各账号的 id 都从 1 开始——
     # 不拦住的话，旧页面里的编辑会写进新账号的同号记录
+    # 请求头只能是 ASCII，前端把（可能是中文的）用户名 URL 编码后放进来
     claimed = request.headers.get(USER_HEADER)
-    if claimed is not None and claimed != user["username"]:
+    if claimed is not None and unquote(claimed) != user["username"]:
         raise HTTPException(401, "账号已切换，请刷新页面")
     if renewed:
         # 滑动续期：浏览器那边的 Max-Age 也要一起往后推

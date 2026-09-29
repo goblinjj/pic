@@ -13,7 +13,8 @@ from typing import Optional
 
 import storage
 
-USERNAME_RE = re.compile(r"^[a-z0-9_]{3,32}$")
+# 常用汉字、小写字母、数字、下划线。字母只收小写，避免 Tom 和 tom 成为两个账号
+USERNAME_RE = re.compile(r"^[\u4e00-\u9fffa-z0-9_]{2,32}$")
 PASSWORD_MIN = 8
 PASSWORD_MAX = 128
 
@@ -121,8 +122,8 @@ def init_schema(conn: sqlite3.Connection):
 # ------------------------------------------------------------------ 用户
 
 def create_user(conn, username: str, password: str) -> int:
-    if not USERNAME_RE.match(username or ""):
-        raise ValueError("用户名只能是 3–32 位小写字母、数字或下划线")
+    if not USERNAME_RE.fullmatch(username or ""):
+        raise ValueError("用户名只能是 2–32 位中文、小写字母、数字或下划线")
     validate_password(password)
     try:
         cur = conn.execute(
