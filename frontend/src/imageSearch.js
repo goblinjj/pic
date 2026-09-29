@@ -1,5 +1,5 @@
-// 以图搜图的状态放在模块里而不是页面组件里：
-// 从结果点进详情再返回时，页面重新挂载，结果还在，不用重新识别。
+// 以图搜图的状态放在模块里而不是页面组件里：拍照入口在列表页等其他页面，
+// 拍完再跳到结果页；结果页被移走（比如刷新以外的重新挂载）时结果也还在，不用重新识别。
 import { reactive } from 'vue'
 import { api } from './api.js'
 import { shrinkForSearch } from './imageCompress.js'

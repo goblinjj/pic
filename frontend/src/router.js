@@ -21,7 +21,15 @@ const routes = [
   { path: '/logs/:id/edit', name: 'LogEdit', component: LogForm },
   { path: '/categories', name: 'Categories', component: Categories },
   { path: '/categories/:id/fields', name: 'CategoryFields', component: CategoryFields },
-  { path: '/search/image', name: 'ImageSearch', component: ImageSearch },
+  {
+    // 同列表：结果上弹出详情卡片，关掉后搜索结果和滚动位置都在
+    path: '/search/image',
+    name: 'ImageSearch',
+    component: ImageSearch,
+    children: [
+      { path: 'logs/:id(\\d+)', name: 'ImageSearchDetail', component: LogDetail },
+    ],
+  },
 ]
 
 export default createRouter({

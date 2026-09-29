@@ -83,12 +83,12 @@
       </div>
     </div>
 
-    <!-- Metadata card -->
-    <div class="rounded-2xl border border-slate-100 bg-white shadow-sm divide-y divide-slate-100">
+    <!-- Metadata card：字段按网格排，短的两三个一行，长文本/多选才占整行 -->
+    <div class="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm divide-y divide-slate-100">
       <!-- Status toggle -->
-      <div class="flex items-center justify-between px-5 py-3.5">
-        <div class="flex items-center gap-2.5">
-          <span class="text-sm font-medium text-slate-700">状态</span>
+      <div class="flex items-center justify-between px-4 py-2.5">
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-medium text-slate-400">状态</span>
           <StatusBadge :status="log.status" />
         </div>
         <button
@@ -102,53 +102,49 @@
         </button>
       </div>
 
-      <!-- Description -->
-      <div v-if="log.description" class="px-5 py-3.5">
-        <p class="mb-0.5 text-xs font-medium text-slate-400">描述</p>
-        <p class="whitespace-pre-wrap text-sm text-slate-700">{{ log.description }}</p>
-      </div>
-
-      <!-- External link -->
-      <div v-if="log.external_link" class="px-5 py-3.5">
-        <p class="mb-0.5 text-xs font-medium text-slate-400">外部链接</p>
-        <a
-          :href="log.external_link"
-          target="_blank"
-          rel="noopener"
-          class="inline-flex items-center gap-1 text-sm text-primary-600 hover:text-primary-700"
-        >
-          {{ log.external_link }}
-          <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-          </svg>
-        </a>
-      </div>
+      <!-- Description：正文，不再单独占一行标题 -->
+      <p v-if="log.description" class="whitespace-pre-wrap px-4 py-3 text-sm leading-relaxed text-slate-800">{{ log.description }}</p>
 
       <!-- Custom fields -->
-      <div v-for="fv in log.field_values" :key="fv.field_id" class="px-5 py-3.5">
-        <p class="mb-0.5 text-xs font-medium text-slate-400">{{ fv.name }}</p>
-        <div v-if="fv.type === 'select' || fv.type === 'multiselect'" class="flex flex-wrap gap-1.5">
-          <span
-            v-for="label in fv.option_labels"
-            :key="label"
-            class="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700"
-          >
-            {{ label }}
-          </span>
+      <dl v-if="log.field_values.length" class="grid grid-cols-2 gap-x-4 gap-y-3 px-4 py-3 sm:grid-cols-3">
+        <div
+          v-for="fv in log.field_values"
+          :key="fv.field_id"
+          class="min-w-0"
+          :class="{ 'col-span-full': isWide(fv) }"
+        >
+          <dt class="truncate text-[11px] leading-4 text-slate-400">{{ fv.name }}</dt>
+          <dd v-if="fv.type === 'multiselect'" class="mt-1 flex flex-wrap gap-1">
+            <span
+              v-for="label in fv.option_labels"
+              :key="label"
+              class="rounded-md bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-700"
+            >
+              {{ label }}
+            </span>
+          </dd>
+          <dd v-else class="mt-0.5 whitespace-pre-wrap break-words text-sm font-medium text-slate-800">{{ displayValue(fv) }}</dd>
         </div>
-        <p v-else class="whitespace-pre-wrap text-sm text-slate-700">{{ fv.value }}</p>
-      </div>
+      </dl>
 
-      <!-- Timestamps -->
-      <div class="flex gap-8 px-5 py-3.5">
-        <div>
-          <p class="mb-0.5 text-xs font-medium text-slate-400">创建时间</p>
-          <p class="text-sm text-slate-600">{{ formatDate(log.created_at) }}</p>
-        </div>
-        <div>
-          <p class="mb-0.5 text-xs font-medium text-slate-400">更新时间</p>
-          <p class="text-sm text-slate-600">{{ formatDate(log.updated_at) }}</p>
-        </div>
+      <!-- External link：一行，过长截断 -->
+      <a
+        v-if="log.external_link"
+        :href="log.external_link"
+        target="_blank"
+        rel="noopener"
+        class="flex items-center gap-2 px-4 py-2.5 text-sm text-primary-600 transition-colors hover:bg-slate-50"
+      >
+        <svg class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
+        </svg>
+        <span class="min-w-0 flex-1 truncate">{{ log.external_link }}</span>
+      </a>
+
+      <!-- Timestamps：一行小字 -->
+      <div class="flex flex-wrap gap-x-3 gap-y-0.5 bg-slate-50/60 px-4 py-2 text-[11px] text-slate-400">
+        <span>创建于 {{ formatDate(log.created_at) }}</span>
+        <span v-if="log.updated_at && log.updated_at !== log.created_at">更新于 {{ formatDate(log.updated_at) }}</span>
       </div>
     </div>
 
@@ -218,16 +214,33 @@ async function loadLog() {
   }
 }
 
-// 从列表点进来的就退回去（Android 返回键、微信返回手势走的也是这条路），
-// 直接打开链接进来的没有上一页，换成列表
+// 从列表/搜图结果点进来的就退回去（Android 返回键、微信返回手势走的也是这条路），
+// 直接打开链接进来的没有上一页，换成卡片所在的宿主页面
 function close() {
   if (window.history.state?.back) router.back()
-  else router.replace('/')
+  else router.replace(route.matched[route.matched.length - 2]?.path || '/')
 }
 
 function formatDate(dt) {
   if (!dt) return ''
-  return new Date(dt).toLocaleString('zh-CN')
+  return new Date(dt).toLocaleString('zh-CN', {
+    year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit',
+  })
+}
+
+function displayValue(fv) {
+  if (fv.type === 'select') return fv.option_labels[0] || ''
+  return fv.value
+}
+
+// 窄格子放不下的才占整行：多行文本、较长的文字、选项较多的多选
+function isWide(fv) {
+  if (fv.type === 'textarea') return true
+  if (fv.type === 'multiselect') {
+    const labels = fv.option_labels || []
+    return labels.length > 3 || labels.join('').length > 10
+  }
+  return String(displayValue(fv) ?? '').length > 12
 }
 
 async function toggleStatus() {

@@ -64,6 +64,7 @@
           :key="hit.log.id"
           :log="hit.log"
           :image="hit.matched_image"
+          detail-route="ImageSearchDetail"
         >
           <template #badge>
             <span
@@ -76,11 +77,17 @@
         </LogCard>
       </div>
     </template>
+
+    <!-- 详情卡片（子路由）盖在搜索结果上 -->
+    <DetailSheet />
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onBeforeUnmount } from 'vue'
+import { useRouter } from 'vue-router'
+import { api, toCardLog } from '../api.js'
+import DetailSheet from '../components/DetailSheet.vue'
 import PageHeader from '../components/PageHeader.vue'
 import EmptyState from '../components/EmptyState.vue'
 import LogCard from '../components/LogCard.vue'
@@ -92,4 +99,23 @@ const errorMessage = computed(() =>
     ? '以图搜图未启用，请联系管理员放置模型文件'
     : imageSearch.error || '搜索失败',
 )
+
+// 详情卡片关掉后只刷新那一条（改了状态/内容、或删掉了），不重新识别
+async function refreshHit(id) {
+  try {
+    const log = toCardLog(await api.getLog(id))
+    const hit = imageSearch.items.find((h) => h.log.id === log.id)
+    if (hit) hit.log = log
+  } catch (e) {
+    if (e.status !== 404) return
+    imageSearch.items = imageSearch.items.filter((h) => String(h.log.id) !== String(id))
+  }
+}
+
+const removeAfterEach = useRouter().afterEach((to, from, failure) => {
+  if (!failure && from.name === 'ImageSearchDetail' && to.name === 'ImageSearch') {
+    refreshHit(from.params.id)
+  }
+})
+onBeforeUnmount(removeAfterEach)
 </script>

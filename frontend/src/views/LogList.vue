@@ -156,21 +156,18 @@
     </div>
 
     <!-- 详情卡片（子路由）盖在列表上 -->
-    <router-view v-slot="{ Component, route: r }">
-      <Transition name="sheet" :duration="250" appear>
-        <component :is="Component" :key="r.params.id" />
-      </Transition>
-    </router-view>
+    <DetailSheet />
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount, onActivated, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { api } from '../api.js'
+import { api, toCardLog } from '../api.js'
 import LogCard from '../components/LogCard.vue'
 import CameraSearchButton from '../components/CameraSearchButton.vue'
 import EmptyState from '../components/EmptyState.vue'
+import DetailSheet from '../components/DetailSheet.vue'
 import { SEARCH_THRESHOLD, filterOptions } from '../fuzzy.js'
 
 const logs = ref([])
@@ -359,8 +356,7 @@ async function refreshItem(id) {
     const log = await api.getLog(id)
     const i = logs.value.findIndex((l) => l.id === log.id)
     if (i === -1) return
-    // 详情接口返回全部字段，卡片上只显示勾了「列表显示」的
-    const next = { ...log, field_values: log.field_values.filter((fv) => fv.show_in_list) }
+    const next = toCardLog(log)
     logs.value = logs.value.map((l, k) => (k === i ? next : l))
   } catch (e) {
     if (e.status !== 404) return
@@ -413,28 +409,3 @@ onMounted(async () => {
 })
 </script>
 
-<style scoped>
-/* 遮罩淡入，卡片从底部滑上来（桌面端居中卡片同样适用） */
-.sheet-enter-active,
-.sheet-leave-active {
-  transition: opacity 0.25s ease;
-}
-.sheet-enter-from,
-.sheet-leave-to {
-  opacity: 0;
-}
-.sheet-enter-active :deep(.sheet-panel),
-.sheet-leave-active :deep(.sheet-panel) {
-  transition: transform 0.25s cubic-bezier(0.32, 0.72, 0, 1);
-}
-.sheet-enter-from :deep(.sheet-panel),
-.sheet-leave-to :deep(.sheet-panel) {
-  transform: translateY(100%);
-}
-@media (min-width: 640px) {
-  .sheet-enter-from :deep(.sheet-panel),
-  .sheet-leave-to :deep(.sheet-panel) {
-    transform: translateY(24px) scale(0.98);
-  }
-}
-</style>

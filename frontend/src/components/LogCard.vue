@@ -1,6 +1,6 @@
 <template>
   <router-link
-    :to="`/logs/${log.id}`"
+    :to="{ name: detailRoute, params: { id: log.id } }"
     class="mb-3 block break-inside-avoid rounded-2xl border border-slate-100 bg-white p-3 shadow-sm transition-shadow hover:shadow-md"
   >
     <!-- Cover image -->
@@ -82,6 +82,8 @@ const props = defineProps({
   log: { type: Object, required: true },
   // 封面图；不传就用日志的第一张图。搜索结果传「匹配到的那张」
   image: { type: Object, default: null },
+  // 点开时用哪个详情路由：详情是宿主页面的子路由，以卡片形式盖在宿主上
+  detailRoute: { type: String, default: 'LogDetail' },
 })
 
 const cover = computed(() => props.image || props.log.images[0] || null)

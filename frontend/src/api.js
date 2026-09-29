@@ -32,6 +32,12 @@ async function request(url, options = {}) {
   return res.json()
 }
 
+// 详情接口返回全部字段，列表卡片上只显示勾了「列表显示」的；
+// 详情卡片关掉后用详情数据就地刷新列表里那一条时要先裁一下
+export function toCardLog(log) {
+  return { ...log, field_values: log.field_values.filter((fv) => fv.show_in_list) }
+}
+
 export const api = {
   // Categories
   getCategories: () => request('/api/categories'),

@@ -235,9 +235,10 @@ async function submit() {
         field_values: collectFieldValues(),
       })
       // 从详情卡片进来的就退回去，不再压一层详情，否则关卡片会回到编辑页
-      const detailPath = `/logs/${route.params.id}`
-      if (window.history.state?.back === detailPath) router.back()
-      else router.replace(detailPath)
+      // 列表上的是 /logs/:id，搜图结果上的是 /search/image/logs/:id
+      const back = window.history.state?.back || ''
+      if (back.endsWith(`/logs/${route.params.id}`)) router.back()
+      else router.replace(`/logs/${route.params.id}`)
     } else {
       const fd = new FormData()
       fd.append('category_id', form.value.category_id)
