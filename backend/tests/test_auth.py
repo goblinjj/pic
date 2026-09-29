@@ -131,3 +131,19 @@ def test_files_require_login(client):
     ).json()
     name = log["images"][0]["filename"]
     assert TestClient(app).get(f"/api/files/{name}").status_code == 401
+
+
+def test_request_from_tab_of_another_account_is_rejected(client):
+    """旧标签页还以为自己是别的账号：它发来的写请求不能落到当前账号的库里。"""
+    resp = client.post(
+        "/api/categories", json={"name": "x"}, headers={"X-PicLog-User": "someone_else"}
+    )
+    assert resp.status_code == 401
+    assert client.get("/api/categories").json() == []
+
+
+def test_matching_user_header_is_accepted(client):
+    resp = client.post(
+        "/api/categories", json={"name": "x"}, headers={"X-PicLog-User": "babelingz"}
+    )
+    assert resp.status_code == 201

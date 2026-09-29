@@ -16,6 +16,7 @@ log = logging.getLogger("piclog.deps")
 
 
 SESSION_COOKIE = "piclog_session"
+USER_HEADER = "X-PicLog-User"
 
 
 def set_session_cookie(response: Response, token: str):
@@ -45,6 +46,12 @@ def current_user(request: Request, response: Response):
     if result is None:
         raise HTTPException(401, "未登录")
     user, renewed = result
+    # 前端每个请求都带上「我以为自己是谁」。同一浏览器里另一个标签页换了账号后，
+    # 这个旧标签页的 Cookie 已经是新账号的了，而各账号的 id 都从 1 开始——
+    # 不拦住的话，旧页面里的编辑会写进新账号的同号记录
+    claimed = request.headers.get(USER_HEADER)
+    if claimed is not None and claimed != user["username"]:
+        raise HTTPException(401, "账号已切换，请刷新页面")
     if renewed:
         # 滑动续期：浏览器那边的 Max-Age 也要一起往后推
         set_session_cookie(response, token)

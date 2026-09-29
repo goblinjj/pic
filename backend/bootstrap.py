@@ -30,10 +30,15 @@ def run() -> list[int]:
         need_first_user = not accounts.all_user_ids(conn)
         initial_password = os.environ.get("INITIAL_USER_PASSWORD", "")
         # 先检查再动文件：缺配置时旧数据原封不动
-        if need_first_user and not initial_password:
-            raise BootstrapError(
-                f"缺少环境变量 INITIAL_USER_PASSWORD：首次启动需要它来创建账号 {INITIAL_USERNAME}"
-            )
+        if need_first_user:
+            if not initial_password:
+                raise BootstrapError(
+                    f"缺少环境变量 INITIAL_USER_PASSWORD：首次启动需要它来创建账号 {INITIAL_USERNAME}"
+                )
+            try:
+                accounts.validate_password(initial_password)
+            except ValueError as exc:
+                raise BootstrapError(f"INITIAL_USER_PASSWORD 不合格：{exc}")
 
         if accounts.get_meta(conn, LEGACY_FLAG) != "1":
             # 旧数据归 1 号账号。先搬文件再建账号、最后写完成标记：
@@ -44,6 +49,13 @@ def run() -> list[int]:
                 if uid != 1:
                     raise BootstrapError(f"首个账号的 id 应为 1，实际为 {uid}")
             accounts.set_meta(conn, LEGACY_FLAG, "1")
+        elif os.path.exists(storage.legacy_db_path()):
+            # 迁移早已完成，旧位置却又冒出一个库：多半是回滚到单用户版本后又写了数据。
+            # 不自动合并，只大声提示，需要人工把这段时间的数据并回 1 号账号
+            log.warning(
+                "发现 %s：多账号迁移后又出现了旧版本的库，其中的数据不会被读取，请人工处理",
+                storage.legacy_db_path(),
+            )
 
         admin_password = os.environ.get("ADMIN_PASSWORD", "")
         if admin_password and accounts.set_admin_password_if_missing(conn, admin_password):

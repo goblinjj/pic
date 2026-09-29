@@ -162,3 +162,24 @@ def test_provision_user_is_idempotent(layout):
     conn = sqlite3.connect(storage.user_db_path(5))
     assert conn.execute("SELECT COUNT(*) FROM categories").fetchone()[0] == 1
     conn.close()
+
+
+def test_invalid_initial_password_fails_before_moving_anything(layout, monkeypatch):
+    data, uploads = layout
+    _make_legacy(data, uploads)
+    monkeypatch.setenv("INITIAL_USER_PASSWORD", "short")
+    with pytest.raises(bootstrap.BootstrapError, match="INITIAL_USER_PASSWORD"):
+        bootstrap.run()
+    assert (data / "piclog.db").exists()
+    assert (uploads / "abc.jpg").exists()
+
+
+def test_warns_when_legacy_db_reappears_after_migration(layout, caplog):
+    """迁移后旧位置又出现库：多半是回滚到了旧版本并写入了数据，必须大声提示。"""
+    data, uploads = layout
+    _make_legacy(data, uploads)
+    bootstrap.run()
+    database.init_db(str(data / "piclog.db"))
+    with caplog.at_level("WARNING", logger="piclog.bootstrap"):
+        bootstrap.run()
+    assert any("piclog.db" in r.getMessage() for r in caplog.records if r.levelname == "WARNING")

@@ -33,6 +33,7 @@ cd "$REPO_ROOT"
 
 START_TS=$(date +%s)
 PREVIOUS_HEAD=""
+FIRST_MIGRATION=""
 
 if [ -t 1 ]; then
     C_BLUE=$'\033[1;34m'; C_GREEN=$'\033[32m'; C_RED=$'\033[31m'
@@ -47,7 +48,18 @@ info() { printf '  %s%s%s\n' "$C_DIM" "$*" "$C_RESET"; }
 
 die() {
     printf '\n%s✗ %s%s\n' "$C_RED" "$*" "$C_RESET" >&2
-    if [ -n "$PREVIOUS_HEAD" ]; then
+    if [ -n "$FIRST_MIGRATION" ]; then
+        # 这次部署会把单用户数据迁移成多账号布局：直接回滚代码的话，旧版本会看到
+        # 一个空库（数据已被移走），之后写入的数据还会和迁移后的数据分家。必须连数据一起还原
+        printf '%s\n这是首次多账号迁移。不要只回滚代码——旧版本会看到空库。连数据一起还原：\n\n' "$C_RED" >&2
+        printf '  ssh %s\n' "$NAS_HOST" >&2
+        printf '  export PATH=%s:$PATH; cd %s\n' "$REMOTE_PATH" "$NAS_DIR" >&2
+        printf '  %s stop %s\n' "$NAS_COMPOSE" "$NAS_SERVICE" >&2
+        printf '  b=$(ls -d backups/pre-multiuser-* | tail -1); echo "从 $b 还原"\n' >&2
+        printf '  mv data data.failed-$(date +%%s) && mv uploads uploads.failed-$(date +%%s)\n' >&2
+        printf '  cp -a "$b/data" "$b/uploads" .\n' >&2
+        printf '  git reset --hard %s && %s up -d --build\n%s\n' "$PREVIOUS_HEAD" "$NAS_COMPOSE" "$C_RESET" >&2
+    elif [ -n "$PREVIOUS_HEAD" ]; then
         printf '%s\nNAS 回滚到部署前的版本：\n\n  ssh %s "export PATH=%s:\\$PATH; cd %s && git reset --hard %s && %s up -d --build"\n%s\n' \
             "$C_DIM" "$NAS_HOST" "$REMOTE_PATH" "$NAS_DIR" "$PREVIOUS_HEAD" "$NAS_COMPOSE" "$C_RESET" >&2
     fi
@@ -121,6 +133,11 @@ ok "已推送 ${local_head}"
 
 # ------------------------------------------------------------------ 重建容器
 step "重建容器"
+# 旧位置还有单用户的库 = 这次启动会做多账号迁移（远端会先备份），失败时的回滚方式不同
+if nas_run "test -f '$NAS_DIR/data/piclog.db'"; then
+    FIRST_MIGRATION=1
+    info "检测到单用户数据，本次会先备份再迁移到多账号布局"
+fi
 run_logged "容器重建" ssh "${SSH_OPTS[@]}" "$NAS_HOST" bash -s <<EOF
 set -euo pipefail
 # 非交互式 SSH 的 PATH 不含 /usr/local/bin，而 docker-compose v1 要在 PATH 上找 docker
@@ -133,7 +150,9 @@ if [ ! -f .env ]; then
     exit 1
 fi
 '$NAS_COMPOSE' build
-if [ ! -f data/accounts.db ]; then
+# 判断依据是「旧库还在」而不是「accounts.db 不存在」：首次启动失败时 accounts.db
+# 可能已经建出来了，回滚后旧版本继续写的数据仍需要在下次迁移前备份
+if [ -f data/piclog.db ]; then
     # 即将第一次迁移到多账号布局：先停容器，保证库文件一致，再整份备份
     backup="backups/pre-multiuser-\$(date +%Y%m%d-%H%M%S)"
     '$NAS_COMPOSE' stop '$NAS_SERVICE'

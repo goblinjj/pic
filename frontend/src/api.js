@@ -1,3 +1,5 @@
+import { currentUser } from './auth.js'
+
 const BASE = ''
 
 // FastAPI 的 422 校验错误里 detail 是一个数组（每项含 loc/msg），
@@ -21,6 +23,11 @@ function formatDetail(detail) {
 
 async function request(url, options = {}) {
   const { noAuthRedirect, ...fetchOptions } = options
+  if (currentUser.value) {
+    // 告诉后端「这个页面以为自己是谁」：别的标签页切换账号后，这里的旧页面发出的
+    // 请求会被拒绝（401 → 回登录页），而不是写进新账号的同号记录
+    fetchOptions.headers = { ...fetchOptions.headers, 'X-PicLog-User': currentUser.value }
+  }
   const res = await fetch(BASE + url, fetchOptions)
   if (res.status === 401 && !noAuthRedirect) {
     // 会话过期、被停用或改了密码：回登录页，登录后回到原来的页面。

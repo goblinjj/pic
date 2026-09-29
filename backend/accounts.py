@@ -63,7 +63,7 @@ def verify_password(password: str, stored: str) -> bool:
 _DUMMY_HASH = hash_password("dummy-password-for-timing")
 
 
-def _validate_password(password: str):
+def validate_password(password: str):
     if not (PASSWORD_MIN <= len(password) <= PASSWORD_MAX):
         raise ValueError(f"密码长度需在 {PASSWORD_MIN}–{PASSWORD_MAX} 个字符之间")
 
@@ -123,7 +123,7 @@ def init_schema(conn: sqlite3.Connection):
 def create_user(conn, username: str, password: str) -> int:
     if not USERNAME_RE.match(username or ""):
         raise ValueError("用户名只能是 3–32 位小写字母、数字或下划线")
-    _validate_password(password)
+    validate_password(password)
     try:
         cur = conn.execute(
             "INSERT INTO users (username, password_hash) VALUES (?, ?)",
@@ -167,7 +167,7 @@ def authenticate(conn, username: str, password: str) -> Optional[sqlite3.Row]:
 
 
 def set_password(conn, uid: int, password: str):
-    _validate_password(password)
+    validate_password(password)
     conn.execute(
         "UPDATE users SET password_hash = ? WHERE id = ?", (hash_password(password), uid)
     )
