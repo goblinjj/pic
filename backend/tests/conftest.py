@@ -14,8 +14,10 @@ os.environ["DB_PATH"] = os.path.join(_TMP, "data", "piclog.db")
 os.environ["UPLOAD_DIR"] = os.path.join(_TMP, "uploads")
 TEST_PASSWORD = "test-password-1"
 os.environ["INITIAL_USER_PASSWORD"] = TEST_PASSWORD
-os.environ.pop("ADMIN_PASSWORD", None)
-os.environ.pop("ADMIN_PATH", None)
+TEST_ADMIN_PATH = "console-testtesttesttest"
+TEST_ADMIN_PASSWORD = "admin-password-1"
+os.environ["ADMIN_PATH"] = TEST_ADMIN_PATH
+os.environ["ADMIN_PASSWORD"] = TEST_ADMIN_PASSWORD
 # 指向不存在的目录，让 main.py 跳过 SPA catch-all 挂载，否则 404 会被兜底路由吞掉
 os.environ["STATIC_DIR"] = os.path.join(_TMP, "no-static")
 # 默认没有模型：需要向量的测试用 fake_embedder 注入假模型

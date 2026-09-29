@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>PicLog 账号管理</title>
+<style>
+  :root { --bg:#f8fafc; --card:#fff; --line:#e2e8f0; --text:#0f172a; --muted:#64748b;
+          --primary:#4f46e5; --primary-hover:#4338ca; --danger:#dc2626; --ok:#16a34a; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+         font:14px/1.5 -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", sans-serif; }
+  main { max-width:720px; margin:0 auto; padding:24px 16px 48px; }
+  h1 { font-size:20px; margin:0 0 16px; display:flex; align-items:center; justify-content:space-between; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px; margin-bottom:16px;
+          box-shadow:0 1px 2px rgba(15,23,42,.04); }
+  .card h2 { font-size:15px; margin:0 0 12px; }
+  input { width:100%; padding:9px 12px; border:1px solid var(--line); border-radius:10px; font:inherit;
+          background:var(--card); color:var(--text); }
+  input:focus { outline:none; border-color:var(--primary); box-shadow:0 0 0 3px #e0e7ff; }
+  button { padding:8px 14px; border:0; border-radius:10px; font:inherit; font-weight:500; cursor:pointer;
+           background:var(--primary); color:#fff; white-space:nowrap; }
+  button:hover { background:var(--primary-hover); }
+  button.ghost { background:transparent; color:var(--muted); border:1px solid var(--line); }
+  button.ghost:hover { background:#f1f5f9; }
+  button.danger { background:transparent; color:var(--danger); border:1px solid #fecaca; }
+  button.danger:hover { background:#fef2f2; }
+  .row { display:flex; gap:8px; align-items:center; }
+  .row > input { flex:1; min-width:0; }
+  .stack > * + * { margin-top:10px; }
+  .msg { font-size:13px; min-height:1.5em; overflow-wrap:anywhere; }
+  .msg.err { color:var(--danger); }
+  .msg.ok { color:var(--ok); }
+  .user { display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; padding:12px 0; border-top:1px solid var(--line); }
+  .user:first-child { border-top:0; padding-top:0; }
+  .user .name { font-weight:600; overflow-wrap:anywhere; }
+  .user .meta { color:var(--muted); font-size:12px; flex-basis:100%; }
+  .user .actions { margin-left:auto; display:flex; gap:6px; }
+  .badge { font-size:12px; padding:1px 8px; border-radius:999px; background:#dcfce7; color:#166534; }
+  .badge.off { background:#f1f5f9; color:var(--muted); }
+  .hidden { display:none; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0f172a; --card:#1e293b; --line:#334155; --text:#e2e8f0; --muted:#94a3b8; }
+    button.ghost:hover, button.danger:hover { background:#334155; }
+    .badge { background:#14532d; color:#bbf7d0; }
+    .badge.off { background:#334155; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <section id="login-view" class="hidden">
+    <h1>PicLog 账号管理</h1>
+    <form id="login-form" class="card stack">
+      <input name="username" placeholder="管理员账号" autocomplete="username" autocapitalize="none" required>
+      <input name="password" type="password" placeholder="密码" autocomplete="current-password" required>
+      <button type="submit">登录</button>
+      <div class="msg err" id="login-msg"></div>
+    </form>
+  </section>
+
+  <section id="app-view" class="hidden">
+    <h1>账号管理 <button class="ghost" id="logout">退出</button></h1>
+
+    <form id="create-form" class="card stack">
+      <h2>新建账号</h2>
+      <input name="username" placeholder="用户名（3–32 位小写字母、数字、下划线）" autocomplete="off" autocapitalize="none" required>
+      <div class="row">
+        <input name="password" placeholder="初始密码（至少 8 位）" autocomplete="new-password" required>
+        <button type="button" class="ghost" id="gen">随机生成</button>
+      </div>
+      <button type="submit">创建</button>
+      <div class="msg" id="create-msg"></div>
+    </form>
+
+    <div class="card">
+      <h2>全部账号</h2>
+      <div id="users"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+// 接口用相对路径：页面总是以 /<后台路径>/ 访问，这里不写死路径
+async function call(method, url, body) {
+  const res = await fetch(url, {
+    method,
+    headers: body ? { 'Content-Type': 'application/json' } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  if (res.status === 401 && !url.endsWith('login')) { show('login'); throw new Error('请重新登录') }
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    const d = data.detail
+    throw new Error(typeof d === 'string' ? d : Array.isArray(d) ? d.map((x) => x.msg).join('；') : `请求失败（${res.status}）`)
+  }
+  return res.status === 204 ? null : res.json()
+}
+
+const $ = (id) => document.getElementById(id)
+
+function show(view) {
+  $('login-view').classList.toggle('hidden', view !== 'login')
+  $('app-view').classList.toggle('hidden', view !== 'app')
+}
+
+function setMsg(el, text, kind) {
+  el.textContent = text
+  el.className = 'msg' + (kind ? ' ' + kind : '')
+}
+
+function randomPassword() {
+  // 去掉易混淆的 0/O、1/l/I
+  const chars = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  const buf = new Uint32Array(14)
+  crypto.getRandomValues(buf)
+  return Array.from(buf, (n) => chars[n % chars.length]).join('')
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
+}
+
+async function loadUsers() {
+  const users = await call('GET', 'api/users')
+  $('users').innerHTML = users.map((u) => `
+    <div class="user" data-id="${u.id}">
+      <span class="name">${esc(u.username)}</span>
+      <span class="badge ${u.is_active ? '' : 'off'}">${u.is_active ? '启用' : '已停用'}</span>
+      <span class="actions">
+        <button class="ghost" data-act="reset">重置密码</button>
+        <button class="${u.is_active ? 'danger' : 'ghost'}" data-act="toggle" data-active="${u.is_active}">${u.is_active ? '停用' : '启用'}</button>
+      </span>
+      <span class="meta">创建于 ${esc(u.created_at)} · 日志 ${u.log_count ?? '?'} 条 · 图片 ${u.image_count ?? '?'} 张</span>
+    </div>`).join('')
+}
+
+$('users').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-act]')
+  if (!btn) return
+  const row = btn.closest('.user')
+  const id = row.dataset.id
+  const name = row.querySelector('.name').textContent
+  try {
+    if (btn.dataset.act === 'reset') {
+      const pw = window.prompt(`为 ${name} 设置新密码（至少 8 位）。留空则随机生成：`, '')
+      if (pw === null) return
+      const password = pw || randomPassword()
+      await call('PUT', `api/users/${id}/password`, { password })
+      window.alert(`${name} 的新密码：\n\n${password}\n\n该账号已登录的设备都需要重新登录。`)
+    } else {
+      const active = btn.dataset.active === 'true'
+      if (active && !window.confirm(`停用 ${name}？停用后无法登录，数据会保留。`)) return
+      await call('PUT', `api/users/${id}/active`, { is_active: !active })
+    }
+    await loadUsers()
+  } catch (err) {
+    window.alert(err.message)
+  }
+})
+
+$('login-form').addEventListener('submit', async (e) => {
+  e.preventDefault()
+  const f = e.target
+  try {
+    await call('POST', 'api/login', { username: f.username.value.trim(), password: f.password.value })
+    f.reset()
+    setMsg($('login-msg'), '')
+    show('app')
+    await loadUsers()
+  } catch (err) {
+    setMsg($('login-msg'), err.message, 'err')
+  }
+})
+
+$('gen').addEventListener('click', () => {
+  $('create-form').password.value = randomPassword()
+})
+
+$('create-form').addEventListener('submit', async (e) => {
+  e.preventDefault()
+  const f = e.target
+  const username = f.username.value.trim()
+  const password = f.password.value
+  try {
+    await call('POST', 'api/users', { username, password })
+    f.reset()
+    setMsg($('create-msg'), `已创建 ${username}，初始密码：${password}`, 'ok')
+    await loadUsers()
+  } catch (err) {
+    setMsg($('create-msg'), err.message, 'err')
+  }
+})
+
+$('logout').addEventListener('click', async () => {
+  await call('POST', 'api/logout').catch(() => {})
+  show('login')
+})
+
+// 首次打开：能拿到列表说明已登录
+loadUsers().then(() => show('app')).catch(() => show('login'))
+</script>
+</body>
+</html>
