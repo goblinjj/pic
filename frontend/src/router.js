@@ -5,8 +5,11 @@ import LogDetail from './views/LogDetail.vue'
 import Categories from './views/Categories.vue'
 import CategoryFields from './views/CategoryFields.vue'
 import ImageSearch from './views/ImageSearch.vue'
+import Login from './views/Login.vue'
+import { ensureSession } from './auth.js'
 
 const routes = [
+  { path: '/login', name: 'Login', component: Login, meta: { public: true } },
   {
     // 详情作为列表的子路由，以卡片形式盖在列表上：列表不卸载，关掉详情时
     // 滚动位置和已加载的页数都还在。地址仍是 /logs/:id，可直接打开或刷新
@@ -32,7 +35,7 @@ const routes = [
   },
 ]
 
-export default createRouter({
+const router = createRouter({
   history: createWebHistory(),
   routes,
   scrollBehavior(to, from, savedPosition) {
@@ -42,3 +45,12 @@ export default createRouter({
     return savedPosition || { top: 0 }
   },
 })
+
+router.beforeEach(async (to) => {
+  const user = await ensureSession()
+  if (to.meta.public) return user ? { path: '/' } : true
+  if (!user) return { name: 'Login', query: { redirect: to.fullPath } }
+  return true
+})
+
+export default router

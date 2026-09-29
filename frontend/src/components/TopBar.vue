@@ -28,7 +28,18 @@
           </svg>
           新建
         </router-link>
+        <span class="ml-3 text-sm text-slate-400">{{ currentUser }}</span>
+        <button
+          @click="logout"
+          class="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900"
+        >
+          退出
+        </button>
       </nav>
     </div>
   </header>
 </template>
+
+<script setup>
+import { currentUser, logout } from '../auth.js'
+</script>

@@ -4,5 +4,5 @@
 const THUMB_VERSION = 2
 
 export function thumbUrl(filename) {
-  return `/uploads/thumbs/${filename}?v=${THUMB_VERSION}`
+  return `/api/files/thumbs/${encodeURIComponent(filename)}?v=${THUMB_VERSION}`
 }

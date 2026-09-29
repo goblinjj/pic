@@ -6,8 +6,7 @@ export default defineConfig({
   plugins: [vue(), tailwindcss()],
   server: {
     proxy: {
-      '/api': 'http://localhost:8080',
-      '/uploads': 'http://localhost:8080'
+      '/api': 'http://localhost:8080'
     }
   }
 })

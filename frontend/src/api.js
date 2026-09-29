@@ -20,7 +20,15 @@ function formatDetail(detail) {
 }
 
 async function request(url, options = {}) {
-  const res = await fetch(BASE + url, options)
+  const { noAuthRedirect, ...fetchOptions } = options
+  const res = await fetch(BASE + url, fetchOptions)
+  if (res.status === 401 && !noAuthRedirect) {
+    // 会话过期、被停用或改了密码：回登录页，登录后回到原来的页面。
+    // 整页跳转，理由同 auth.js 的 logout
+    const back = window.location.pathname + window.location.search
+    window.location.assign(`/login?redirect=${encodeURIComponent(back)}`)
+    throw Object.assign(new Error('请重新登录'), { status: 401 })
+  }
   if (res.status === 204) return null
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }))
@@ -39,6 +47,15 @@ export function toCardLog(log) {
 }
 
 export const api = {
+  // Auth
+  login: (username, password) => request('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+    // 登录失败的 401 只是「密码错」，留在登录页显示
+    noAuthRedirect: true,
+  }),
+
   // Categories
   getCategories: () => request('/api/categories'),
   createCategory: (data) => request('/api/categories', {

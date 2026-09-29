@@ -165,7 +165,7 @@
             </svg>
           </button>
           <img
-            :src="`/uploads/${previewImg.filename}`"
+            :src="`/api/files/${encodeURIComponent(previewImg.filename)}`"
             class="max-h-[90vh] max-w-[90vw] rounded-lg object-contain"
             @click.stop
           />

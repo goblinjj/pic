@@ -102,6 +102,12 @@
         </div>
       </div>
     </div>
+
+    <!-- 手机上没有顶栏，退出入口放在这里 -->
+    <div class="mt-8 flex items-center justify-between rounded-2xl border border-slate-100 bg-white px-4 py-3 text-sm shadow-sm md:hidden">
+      <span class="text-slate-500">当前账号 <span class="font-medium text-slate-900">{{ currentUser }}</span></span>
+      <button @click="logout" class="font-medium text-red-500">退出登录</button>
+    </div>
   </div>
 </template>
 
@@ -110,6 +116,7 @@ import { ref, onMounted } from 'vue'
 import { api } from '../api.js'
 import PageHeader from '../components/PageHeader.vue'
 import EmptyState from '../components/EmptyState.vue'
+import { currentUser, logout } from '../auth.js'
 
 const categories = ref([])
 const newName = ref('')
