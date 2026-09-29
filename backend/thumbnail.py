@@ -6,7 +6,7 @@ THUMB_DIR = os.path.join(UPLOAD_DIR, "thumbs")
 THUMB_SIZE = (800, 800)
 THUMB_QUALITY = 85
 # 标记文件：存在即表示「按 EXIF 摆正」的缩略图重建已经做过
-# 以后若再批量重建缩略图，记得同步加大前端 LogCard.vue 的 THUMB_VERSION，否则浏览器会继续显示缓存的旧图
+# 以后若再批量重建缩略图，记得同步加大前端 src/thumbs.js 的 THUMB_VERSION，否则浏览器会继续显示缓存的旧图
 ORIENTED_MARKER = ".oriented-v1"
 
 

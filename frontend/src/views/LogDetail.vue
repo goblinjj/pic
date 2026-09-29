@@ -39,7 +39,7 @@
       <div v-else class="grid grid-cols-3 gap-2">
         <div v-for="img in log.images" :key="img.id" class="group relative">
           <img
-            :src="`/uploads/${img.filename}`"
+            :src="thumbUrl(img.filename)"
             :alt="img.original_name"
             class="aspect-square w-full cursor-pointer rounded-xl object-cover transition-opacity group-hover:opacity-90"
             @click="openPreview(img)"
@@ -176,6 +176,7 @@ import PageHeader from '../components/PageHeader.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import CompressToggle from '../components/CompressToggle.vue'
 import PhotoSourceSheet from '../components/PhotoSourceSheet.vue'
+import { thumbUrl } from '../thumbs.js'
 
 const route = useRoute()
 const router = useRouter()
