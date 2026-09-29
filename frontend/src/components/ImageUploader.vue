@@ -18,23 +18,26 @@
         </button>
       </div>
     </div>
-    <label
-      class="flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50/50 px-4 py-8 text-slate-400 transition-colors hover:border-primary-400 hover:text-primary-500"
+    <button
+      type="button"
+      class="flex w-full cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50/50 px-4 py-8 text-slate-400 transition-colors hover:border-primary-400 hover:text-primary-500"
+      @click="sheet.open()"
       @dragover.prevent
       @drop.prevent="onDrop"
     >
-      <input type="file" multiple accept="image/*" @change="onSelect" ref="fileInput" class="hidden" />
       <svg class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
         <path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V9.75m0 0 3 3m-3-3-3 3M6.75 19.5a4.5 4.5 0 0 1-1.41-8.775 5.25 5.25 0 0 1 10.233-2.33 3 3 0 0 1 3.758 3.848A3.752 3.752 0 0 1 18 19.5H6.75Z" />
       </svg>
       <span class="text-sm font-medium">点击或拖拽上传图片</span>
-    </label>
+    </button>
+    <PhotoSourceSheet ref="sheet" multiple @pick="addFiles" />
   </div>
 </template>
 
 <script setup>
 import { ref, watch } from 'vue'
 import { compressImage } from '../imageCompress.js'
+import PhotoSourceSheet from './PhotoSourceSheet.vue'
 
 const props = defineProps({
   modelValue: { type: Array, default: () => [] },
@@ -43,7 +46,7 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue'])
 
 const previews = ref([])
-const fileInput = ref(null)
+const sheet = ref(null)
 
 function addFiles(fileList) {
   for (const f of fileList) {
@@ -52,11 +55,6 @@ function addFiles(fileList) {
     previews.value.push({ file: f, name: f.name, url: URL.createObjectURL(f) })
   }
   emit('update:modelValue', previews.value.map(p => p.file))
-}
-
-function onSelect(e) {
-  addFiles(e.target.files)
-  e.target.value = ''
 }
 
 function onDrop(e) {
