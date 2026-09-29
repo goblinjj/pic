@@ -42,8 +42,10 @@ const cameraInput = ref(null)
 const albumInput = ref(null)
 
 function open() {
-  // 桌面端没有「拍照」这回事，直接打开文件选择，和原来一样
-  if (!window.matchMedia('(pointer: coarse)').matches) {
+  // 桌面端没有「拍照」这回事，直接打开文件选择，和原来一样。
+  // 微信（含企业微信）会自己弹「拍摄 / 从手机相册选择」，再弹我们的菜单就重复了
+  const inWeChat = /MicroMessenger/i.test(navigator.userAgent)
+  if (inWeChat || !window.matchMedia('(pointer: coarse)').matches) {
     albumInput.value.click()
     return
   }
