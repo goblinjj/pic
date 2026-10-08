@@ -4,7 +4,7 @@ const BASE = ''
 
 // FastAPI 的 422 校验错误里 detail 是一个数组（每项含 loc/msg），
 // 直接丢给 new Error 会变成 alert("[object Object]")，得摊平成人看得懂的文字
-function formatDetail(detail) {
+export function formatDetail(detail) {
   if (typeof detail === 'string') return detail
   if (Array.isArray(detail)) {
     const parts = detail.map((item) => {
@@ -46,6 +46,20 @@ async function request(url, options = {}) {
     throw error
   }
   return res.json()
+}
+
+// 数组参数展开成重复的 key（fv=1:2&fv=1:3），空值不发
+export function toQuery(params = {}) {
+  const q = new URLSearchParams()
+  for (const [k, v] of Object.entries(params)) {
+    if (v === null || v === undefined || v === '') continue
+    if (Array.isArray(v)) {
+      for (const item of v) q.append(k, item)
+    } else {
+      q.set(k, v)
+    }
+  }
+  return q
 }
 
 // 详情接口返回全部字段，列表卡片上只显示勾了「列表显示」的；
@@ -118,18 +132,7 @@ export const api = {
   }),
 
   // Logs
-  getLogs: (params = {}) => {
-    const q = new URLSearchParams()
-    for (const [k, v] of Object.entries(params)) {
-      if (v === null || v === undefined || v === '') continue
-      if (Array.isArray(v)) {
-        for (const item of v) q.append(k, item)
-      } else {
-        q.set(k, v)
-      }
-    }
-    return request(`/api/logs?${q}`)
-  },
+  getLogs: (params = {}) => request(`/api/logs?${toQuery(params)}`),
   getLog: (id) => request(`/api/logs/${id}`),
   createLog: (formData) => request('/api/logs', {
     method: 'POST',

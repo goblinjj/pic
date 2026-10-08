@@ -60,7 +60,7 @@
       <div v-else class="grid grid-cols-3 gap-2">
         <div v-for="img in log.images" :key="img.id" class="group relative">
           <img
-            :src="thumbUrl(img.filename)"
+            :src="source.thumbUrl(img.filename)"
             :alt="img.original_name"
             class="aspect-square w-full cursor-pointer rounded-xl object-cover transition-opacity group-hover:opacity-90"
             @click="openPreview(img)"
@@ -165,7 +165,7 @@
             </svg>
           </button>
           <img
-            :src="`/api/files/${encodeURIComponent(previewImg.filename)}`"
+            :src="source.fileUrl(previewImg.filename)"
             class="max-h-[90vh] max-w-[90vw] rounded-lg object-contain"
             @click.stop
           />
@@ -196,8 +196,9 @@ import { compressImages } from '../imageCompress.js'
 import StatusBadge from '../components/StatusBadge.vue'
 import CompressToggle from '../components/CompressToggle.vue'
 import PhotoSourceSheet from '../components/PhotoSourceSheet.vue'
-import { thumbUrl } from '../thumbs.js'
+import { useSource } from '../source.js'
 
+const source = useSource()
 const route = useRoute()
 const router = useRouter()
 const log = ref(null)
@@ -208,7 +209,7 @@ const loadError = ref('')
 
 async function loadLog() {
   try {
-    log.value = await api.getLog(route.params.id)
+    log.value = await source.getLog(route.params.id)
   } catch (e) {
     loadError.value = e.status === 404 ? '日志不存在或已删除' : e.message
   }
@@ -217,8 +218,11 @@ async function loadLog() {
 // 从列表/搜图结果点进来的就退回去（Android 返回键、微信返回手势走的也是这条路），
 // 直接打开链接进来的没有上一页，换成卡片所在的宿主页面
 function close() {
-  if (window.history.state?.back) router.back()
-  else router.replace(route.matched[route.matched.length - 2]?.path || '/')
+  if (window.history.state?.back) return router.back()
+  const host = route.matched[route.matched.length - 2]
+  const { id, ...params } = route.params
+  if (host?.name) router.replace({ name: host.name, params })
+  else router.replace('/')
 }
 
 function formatDate(dt) {

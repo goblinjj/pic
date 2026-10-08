@@ -163,17 +163,19 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount, onActivated, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { api, toCardLog } from '../api.js'
+import { toCardLog } from '../api.js'
 import LogCard from '../components/LogCard.vue'
 import CameraSearchButton from '../components/CameraSearchButton.vue'
 import EmptyState from '../components/EmptyState.vue'
 import DetailSheet from '../components/DetailSheet.vue'
+import { useSource } from '../source.js'
 import { SEARCH_THRESHOLD, filterOptions } from '../fuzzy.js'
 
+const source = useSource()
 const logs = ref([])
 const categories = ref([])
 const search = ref('')
-const filterCategory = ref('')
+const filterCategory = ref(source.categoryId ?? '')
 const filterStatus = ref('')
 const page = ref(1)
 const size = 20
@@ -211,6 +213,15 @@ const sortableFields = computed(() =>
   activeFields.value.filter((f) => f.type === 'number' || f.type === 'date')
 )
 
+async function loadFields(cid) {
+  try {
+    activeFields.value = cid ? await source.getCategoryFields(cid) : []
+  } catch (e) {
+    alert(e.message)
+    activeFields.value = []
+  }
+}
+
 watch(filterCategory, async (cid) => {
   // 换分类就把该分类专属的筛选条件全部重置，并由 watcher 统一负责重新加载，
   // 避免点击分类的 handler 在 filterCategory 更新之后、watcher 刷新 state 之前
@@ -218,12 +229,7 @@ watch(filterCategory, async (cid) => {
   selectedOptions.value = {}
   optionQueries.value = {}
   sortValue.value = ''
-  try {
-    activeFields.value = cid ? await api.getCategoryFields(cid) : []
-  } catch (e) {
-    alert(e.message)
-    activeFields.value = []
-  }
+  await loadFields(cid)
   load()
 })
 
@@ -270,7 +276,7 @@ function debouncedLoad() {
 }
 
 function fetchPage(p) {
-  return api.getLogs({
+  return source.getLogs({
     search: search.value,
     category_id: filterCategory.value || undefined,
     status: filterStatus.value || undefined,
@@ -353,7 +359,7 @@ async function refreshItem(id) {
   const index = logs.value.findIndex((l) => String(l.id) === String(id))
   if (index === -1) return
   try {
-    const log = await api.getLog(id)
+    const log = await source.getLog(id)
     const i = logs.value.findIndex((l) => l.id === log.id)
     if (i === -1) return
     const next = toCardLog(log)
@@ -368,7 +374,7 @@ async function refreshItem(id) {
 const router = useRouter()
 const removeAfterEach = router.afterEach((to, from, failure) => {
   if (failure) return
-  if (from.name === 'LogDetail' && to.name === 'LogList') refreshItem(from.params.id)
+  if (from.name === source.routes.detail && to.name === source.routes.list) refreshItem(from.params.id)
   // 新建完会直接打开新日志的卡片，列表得重载才会出现在最前面
   if (from.name === 'LogCreate' && to.matched[0]?.name === 'LogList') load()
 })
@@ -377,7 +383,7 @@ onActivated(async () => {
   // keep-alive 下 onMounted 只跑一次；从分类页回来时分类可能增删过
   rearmObserver()
   try {
-    categories.value = await api.getCategories()
+    categories.value = await source.getCategories()
   } catch {
     // 拉不到就沿用旧的，不打断浏览
   }
@@ -401,10 +407,12 @@ onMounted(async () => {
   // 分类拉不回来不能连日志一起不加载：否则用户只看到「暂无日志」，
   // 对个人存档来说读起来就是「我的数据没了」
   try {
-    categories.value = await api.getCategories()
+    categories.value = await source.getCategories()
   } catch (e) {
     alert(e.message)
   }
+  // 分类级分享一开始就锁定在该分类：watcher 不会因初始值触发，字段筛选要手动拉
+  if (filterCategory.value) await loadFields(filterCategory.value)
   load()
 })
 </script>

@@ -1,6 +1,6 @@
 <template>
   <router-link
-    :to="{ name: detailRoute, params: { id: log.id } }"
+    :to="{ name: detailRoute || source.routes.detail, params: { ...source.params, id: log.id } }"
     class="mb-3 block break-inside-avoid rounded-2xl border border-slate-100 bg-white p-3 shadow-sm transition-shadow hover:shadow-md"
   >
     <!-- Cover image -->
@@ -23,7 +23,7 @@
       </div>
       <img
         v-show="imgState !== 'error'"
-        :src="thumbUrl(cover.filename)"
+        :src="source.thumbUrl(cover.filename)"
         :alt="cover.original_name"
         loading="lazy"
         decoding="async"
@@ -76,15 +76,17 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import StatusBadge from './StatusBadge.vue'
-import { thumbUrl } from '../thumbs.js'
+import { useSource } from '../source.js'
 
 const props = defineProps({
   log: { type: Object, required: true },
   // 封面图；不传就用日志的第一张图。搜索结果传「匹配到的那张」
   image: { type: Object, default: null },
-  // 点开时用哪个详情路由：详情是宿主页面的子路由，以卡片形式盖在宿主上
-  detailRoute: { type: String, default: 'LogDetail' },
+  // 点开时用哪个详情路由；不传就用数据源的列表详情
+  detailRoute: { type: String, default: '' },
 })
+
+const source = useSource()
 
 const cover = computed(() => props.image || props.log.images[0] || null)
 

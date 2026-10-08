@@ -20,7 +20,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { searchByPhoto } from '../imageSearch.js'
+import { useSource } from '../source.js'
 import PhotoSourceSheet from './PhotoSourceSheet.vue'
 
 const props = defineProps({
@@ -29,6 +29,7 @@ const props = defineProps({
   label: { type: String, default: '' },
 })
 
+const source = useSource()
 const sheet = ref(null)
 const route = useRoute()
 const router = useRouter()
@@ -40,7 +41,8 @@ const classes = computed(() => ({
 }[props.variant]))
 
 function onPick(files) {
-  searchByPhoto(files[0])
-  if (route.name !== 'ImageSearch') router.push({ name: 'ImageSearch' })
+  source.imageSearch.searchByPhoto(files[0])
+  const name = source.routes.imageSearch
+  if (route.name !== name) router.push({ name, params: source.params })
 }
 </script>

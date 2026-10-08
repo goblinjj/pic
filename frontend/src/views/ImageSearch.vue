@@ -64,7 +64,7 @@
           :key="hit.log.id"
           :log="hit.log"
           :image="hit.matched_image"
-          detail-route="ImageSearchDetail"
+          :detail-route="source.routes.imageSearchDetail"
         >
           <template #badge>
             <span
@@ -86,13 +86,18 @@
 <script setup>
 import { computed, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
-import { api, toCardLog } from '../api.js'
+import { toCardLog } from '../api.js'
 import DetailSheet from '../components/DetailSheet.vue'
 import PageHeader from '../components/PageHeader.vue'
 import EmptyState from '../components/EmptyState.vue'
 import LogCard from '../components/LogCard.vue'
 import CameraSearchButton from '../components/CameraSearchButton.vue'
-import { imageSearch, retry, scoreLabel } from '../imageSearch.js'
+import { scoreLabel } from '../imageSearch.js'
+import { useSource } from '../source.js'
+
+const source = useSource()
+const imageSearch = source.imageSearch.state
+const retry = () => source.imageSearch.retry()
 
 const errorMessage = computed(() =>
   imageSearch.errorStatus === 503
@@ -103,7 +108,7 @@ const errorMessage = computed(() =>
 // 详情卡片关掉后只刷新那一条（改了状态/内容、或删掉了），不重新识别
 async function refreshHit(id) {
   try {
-    const log = toCardLog(await api.getLog(id))
+    const log = toCardLog(await source.getLog(id))
     const hit = imageSearch.items.find((h) => h.log.id === log.id)
     if (hit) hit.log = log
   } catch (e) {
@@ -113,7 +118,7 @@ async function refreshHit(id) {
 }
 
 const removeAfterEach = useRouter().afterEach((to, from, failure) => {
-  if (!failure && from.name === 'ImageSearchDetail' && to.name === 'ImageSearch') {
+  if (!failure && from.name === source.routes.imageSearchDetail && to.name === source.routes.imageSearch) {
     refreshHit(from.params.id)
   }
 })

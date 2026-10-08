@@ -3,6 +3,11 @@
 // 2 = 按 EXIF 摆正后重建（后端 thumbnail.ORIENTED_MARKER）
 const THUMB_VERSION = 2
 
-export function thumbUrl(filename) {
-  return `/api/files/thumbs/${encodeURIComponent(filename)}?v=${THUMB_VERSION}`
+// base：主人侧 /api/files，分享页 /api/share/<token>/files
+export function thumbUrl(filename, base = '/api/files') {
+  return `${base}/thumbs/${encodeURIComponent(filename)}?v=${THUMB_VERSION}`
+}
+
+export function fileUrl(filename, base = '/api/files') {
+  return `${base}/${encodeURIComponent(filename)}`
 }
