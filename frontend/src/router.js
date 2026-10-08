@@ -4,6 +4,7 @@ import LogForm from './views/LogForm.vue'
 import LogDetail from './views/LogDetail.vue'
 import Categories from './views/Categories.vue'
 import CategoryFields from './views/CategoryFields.vue'
+import Shares from './views/Shares.vue'
 import ImageSearch from './views/ImageSearch.vue'
 import Login from './views/Login.vue'
 import ShareLayout from './views/ShareLayout.vue'
@@ -25,6 +26,7 @@ const routes = [
   { path: '/logs/:id/edit', name: 'LogEdit', component: LogForm },
   { path: '/categories', name: 'Categories', component: Categories },
   { path: '/categories/:id/fields', name: 'CategoryFields', component: CategoryFields },
+  { path: '/shares', name: 'Shares', component: Shares },
   {
     // 同列表：结果上弹出详情卡片，关掉后搜索结果和滚动位置都在
     path: '/search/image',

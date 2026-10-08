@@ -1,6 +1,21 @@
 <template>
   <div>
-    <PageHeader title="分类管理" />
+    <PageHeader title="分类管理">
+      <template #actions>
+        <router-link
+          to="/shares"
+          class="rounded-lg px-2.5 py-1.5 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-100"
+        >
+          我的分享
+        </router-link>
+        <button
+          @click="share(null)"
+          class="rounded-lg px-2.5 py-1.5 text-sm font-medium text-primary-600 transition-colors hover:bg-primary-50"
+        >
+          分享全部
+        </button>
+      </template>
+    </PageHeader>
 
     <!-- Add form -->
     <form
@@ -76,6 +91,12 @@
             </router-link>
           </div>
           <div class="flex items-center gap-1">
+            <button
+              @click="share(c)"
+              class="flex h-8 items-center rounded-lg px-2 text-xs font-medium text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            >
+              分享
+            </button>
             <router-link
               :to="`/categories/${c.id}/fields`"
               class="flex h-8 items-center rounded-lg px-2 text-xs font-medium text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
@@ -108,6 +129,27 @@
       <span class="text-slate-500">当前账号 <span class="font-medium text-slate-900">{{ currentUser }}</span></span>
       <button @click="logout" class="font-medium text-red-500">退出登录</button>
     </div>
+
+    <!-- 新建的分享链接 -->
+    <div
+      v-if="created"
+      class="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 p-4 sm:items-center"
+      @click.self="created = null"
+    >
+      <div class="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
+        <h2 class="mb-1 text-base font-bold text-slate-900">已创建分享链接</h2>
+        <p class="mb-3 text-xs text-slate-500">
+          {{ created.category_id === null ? '全部内容' : `分类「${created.category_name}」` }}，
+          拿到链接的人无需登录即可只读浏览。可在「我的分享」里随时撤销。
+        </p>
+        <ShareLinkField :token="created.token" />
+        <div class="mt-4 text-right">
+          <button @click="created = null" class="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-500 hover:bg-slate-100">
+            关闭
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -116,9 +158,11 @@ import { ref, onMounted } from 'vue'
 import { api } from '../api.js'
 import PageHeader from '../components/PageHeader.vue'
 import EmptyState from '../components/EmptyState.vue'
+import ShareLinkField from '../components/ShareLinkField.vue'
 import { currentUser, logout } from '../auth.js'
 
 const categories = ref([])
+const created = ref(null)
 const newName = ref('')
 const newOrder = ref(0)
 const editing = ref(null)
@@ -147,6 +191,15 @@ async function saveEdit(id) {
   await api.updateCategory(id, { name: editName.value.trim(), sort_order: editOrder.value })
   editing.value = null
   await load()
+}
+
+// c 为 null = 分享整个账号
+async function share(c) {
+  try {
+    created.value = await api.createShare(c ? c.id : null)
+  } catch (e) {
+    alert(e.message)
+  }
 }
 
 async function removeCategory(id) {

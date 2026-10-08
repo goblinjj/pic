@@ -157,6 +157,16 @@ export const api = {
   }),
   deleteImage: (id) => request(`/api/images/${id}`, { method: 'DELETE' }),
 
+  // Shares
+  getShares: () => request('/api/shares'),
+  // categoryId 为 null = 分享整个账号
+  createShare: (categoryId) => request('/api/shares', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ category_id: categoryId }),
+  }),
+  deleteShare: (token) => request(`/api/shares/${encodeURIComponent(token)}`, { method: 'DELETE' }),
+
   // Image search
   searchByImage: (file, limit = 20) => {
     const fd = new FormData()
