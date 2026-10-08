@@ -12,7 +12,7 @@
           <h1 class="flex-1 truncate text-lg font-bold text-slate-900">
             {{ log ? `#${log.id} ${log.category_name}` : '日志详情' }}
           </h1>
-          <template v-if="log">
+          <template v-if="log && !source.readonly">
             <router-link
               :to="`/logs/${log.id}/edit`"
               class="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
@@ -48,7 +48,7 @@
     <div class="mb-4 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
       <div class="mb-3 flex items-center justify-between">
         <h2 class="text-sm font-semibold text-slate-900">图片 ({{ log.images.length }})</h2>
-        <div class="flex items-center gap-2">
+        <div v-if="!source.readonly" class="flex items-center gap-2">
           <CompressToggle v-model="compress" />
           <button type="button" @click="sheet.open()" class="rounded-lg px-2.5 py-1 text-xs font-medium text-primary-600 transition-colors hover:bg-primary-50">
             追加上传
@@ -66,6 +66,7 @@
             @click="openPreview(img)"
           />
           <button
+            v-if="!source.readonly"
             @click="removeImage(img.id)"
             class="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100"
           >
@@ -75,7 +76,7 @@
           </button>
         </div>
         <!-- Add card -->
-        <button type="button" @click="sheet.open()" class="flex aspect-square cursor-pointer items-center justify-center rounded-xl border-2 border-dashed border-slate-200 text-slate-300 transition-colors hover:border-primary-300 hover:text-primary-400">
+        <button v-if="!source.readonly" type="button" @click="sheet.open()" class="flex aspect-square cursor-pointer items-center justify-center rounded-xl border-2 border-dashed border-slate-200 text-slate-300 transition-colors hover:border-primary-300 hover:text-primary-400">
           <svg class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
           </svg>
@@ -92,6 +93,7 @@
           <StatusBadge :status="log.status" />
         </div>
         <button
+          v-if="!source.readonly"
           @click="toggleStatus"
           class="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
           :class="log.status === 'completed'

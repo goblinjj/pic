@@ -6,6 +6,7 @@ import Categories from './views/Categories.vue'
 import CategoryFields from './views/CategoryFields.vue'
 import ImageSearch from './views/ImageSearch.vue'
 import Login from './views/Login.vue'
+import ShareLayout from './views/ShareLayout.vue'
 import { ensureSession } from './auth.js'
 
 const routes = [
@@ -33,6 +34,26 @@ const routes = [
       { path: 'logs/:id(\\d+)', name: 'ImageSearchDetail', component: LogDetail },
     ],
   },
+  {
+    // 只读分享：不需要登录，已登录的人打开看到的也是分享内容
+    path: '/s/:token',
+    component: ShareLayout,
+    meta: { public: true, share: true },
+    children: [
+      {
+        path: '',
+        name: 'ShareList',
+        component: LogList,
+        children: [{ path: 'logs/:id(\\d+)', name: 'ShareDetail', component: LogDetail }],
+      },
+      {
+        path: 'search/image',
+        name: 'ShareImageSearch',
+        component: ImageSearch,
+        children: [{ path: 'logs/:id(\\d+)', name: 'ShareImageSearchDetail', component: LogDetail }],
+      },
+    ],
+  },
 ]
 
 const router = createRouter({
@@ -47,6 +68,8 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
+  // 分享页不查登录态、不重定向
+  if (to.meta.share) return true
   const user = await ensureSession()
   if (to.meta.public) return user ? { path: '/' } : true
   if (!user) return { name: 'Login', query: { redirect: to.fullPath } }

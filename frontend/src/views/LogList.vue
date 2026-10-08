@@ -19,7 +19,8 @@
 
     <!-- Filter pills -->
     <div class="mb-4 flex gap-2 overflow-x-auto hide-scrollbar pb-1">
-      <!-- Category pills -->
+      <!-- Category pills：分类级分享已锁定分类，不显示 -->
+      <template v-if="!source.categoryId">
       <button
         @click="filterCategory = ''"
         class="shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors"
@@ -38,6 +39,7 @@
       </button>
 
       <span class="mx-0.5 w-px self-stretch bg-slate-200"></span>
+      </template>
 
       <!-- Status pills -->
       <button
@@ -119,6 +121,7 @@
     <!-- Empty state -->
     <EmptyState v-else-if="logs.length === 0" message="暂无日志">
       <router-link
+        v-if="!source.readonly"
         to="/logs/new"
         class="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary-700"
       >
