@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse
 import admin
 import bootstrap
 import indexer
-from routers import auth, categories, logs, images, fields, search, files
+from routers import auth, categories, logs, images, fields, search, files, shares
 
 STATIC_DIR = os.environ.get("STATIC_DIR", "/app/static")
 log = logging.getLogger("piclog")
@@ -22,6 +22,7 @@ def create_app() -> FastAPI:
     app.include_router(fields.router)
     app.include_router(search.router)
     app.include_router(files.router)
+    app.include_router(shares.router)
 
     # 必须在 SPA 兜底路由之前注册
     admin_path = admin.configured_path()

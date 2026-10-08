@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 import sqlite3
-from deps import get_db
+import accounts
+from deps import current_user_id, get_db
 from models import CategoryCreate, CategoryUpdate, CategoryOut
 
 router = APIRouter(prefix="/api/categories", tags=["categories"])
@@ -62,7 +63,11 @@ def update_category(
 
 
 @router.delete("/{category_id}", status_code=204)
-def delete_category(category_id: int, db: sqlite3.Connection = Depends(get_db)):
+def delete_category(
+    category_id: int,
+    db: sqlite3.Connection = Depends(get_db),
+    user_id: int = Depends(current_user_id),
+):
     existing = db.execute(
         "SELECT id FROM categories WHERE id = ?", (category_id,)
     ).fetchone()
@@ -75,3 +80,10 @@ def delete_category(category_id: int, db: sqlite3.Connection = Depends(get_db)):
         raise HTTPException(400, "Category has logs, cannot delete")
     db.execute("DELETE FROM categories WHERE id = ?", (category_id,))
     db.commit()
+    # 以后新建的分类可能复用这个 id（SQLite 无 AUTOINCREMENT 时会复用最大值），
+    # 旧链接不能因此指向新分类
+    conn = accounts.connect()
+    try:
+        accounts.delete_shares_for_category(conn, user_id, category_id)
+    finally:
+        conn.close()

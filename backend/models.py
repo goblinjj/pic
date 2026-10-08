@@ -145,3 +145,22 @@ class LoginIn(BaseModel):
 
 class MeOut(BaseModel):
     username: str
+
+
+class ShareCreate(BaseModel):
+    # None = 分享整个账号
+    category_id: Optional[int] = None
+
+
+class ShareOut(BaseModel):
+    token: str
+    category_id: Optional[int]
+    category_name: str = ""
+    created_at: str
+
+
+class ShareInfoOut(BaseModel):
+    scope: str                 # "account" | "category"
+    category_id: Optional[int]
+    category_name: str = ""
+    owner: str
