@@ -3,7 +3,7 @@
 几千张图的规模下全量计算只要几毫秒，远小于模型推理的耗时，
 所以不做向量缓存，也不引入向量数据库。
 """
-from typing import NamedTuple
+from typing import NamedTuple, Optional
 
 import numpy as np
 
@@ -19,21 +19,26 @@ class Hit(NamedTuple):
     image_id: int
 
 
-def rank_logs(db, query_vec, limit: int, min_score: float = MIN_SCORE) -> tuple[list[Hit], int]:
+def rank_logs(
+    db, query_vec, limit: int, min_score: float = MIN_SCORE, category_id: Optional[int] = None,
+) -> tuple[list[Hit], int]:
     """返回 (按分数降序的命中列表, 参与比对的向量数)。
 
     每条日志只出现一次，分数取它所有图片中的最高分，image_id 是那张图。
+    category_id 非空时只在该分类内比对（分类级分享）。
     """
-    rows = db.execute(
-        """
+    sql = """
         SELECT e.image_id, e.vector, i.log_id
         FROM image_embeddings e
         JOIN images i ON i.id = e.image_id
         JOIN logs l ON l.id = i.log_id
         WHERE l.deleted_at IS NULL AND e.model = ?
-        """,
-        (embedding.MODEL_ID,),
-    ).fetchall()
+    """
+    params: list = [embedding.MODEL_ID]
+    if category_id is not None:
+        sql += " AND l.category_id = ?"
+        params.append(category_id)
+    rows = db.execute(sql, params).fetchall()
     rows = [r for r in rows if len(r["vector"]) == embedding.DIM * 4]
     if not rows:
         return [], 0

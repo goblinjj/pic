@@ -1,6 +1,7 @@
 """拍照以图搜图。"""
 import io
 import sqlite3
+from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from PIL import Image, ImageOps, UnidentifiedImageError
@@ -39,16 +40,14 @@ def _load_query_image(content: bytes) -> Image.Image:
     return img.convert("RGB")
 
 
-# 同步函数：FastAPI 会放到线程池里跑，几秒的推理不会卡住事件循环
-@router.post("/api/search/image", response_model=ImageSearchOut)
-def search_by_image(
-    file: UploadFile = File(...),
-    limit: int = Query(20, ge=1, le=50),
-    # 评测脚本传 -1 取回全部分数；前端不传
-    min_score: float = Query(MIN_SCORE, ge=-1.0, le=1.0),
-    db: sqlite3.Connection = Depends(get_db),
-    user_id: int = Depends(current_user_id),
-):
+def run_image_search(
+    db: sqlite3.Connection,
+    file: UploadFile,
+    limit: int,
+    min_score: float,
+    category_id: Optional[int] = None,
+) -> tuple[list[dict], int]:
+    """返回 (命中列表, 参与比对的向量数)。主人侧与分享侧共用。"""
     if not embedding.available():
         raise HTTPException(503, "以图搜图未启用")
     content = file.file.read(MAX_QUERY_BYTES + 1)
@@ -60,7 +59,7 @@ def search_by_image(
     except embedding.EmbeddingUnavailable:
         raise HTTPException(503, "以图搜图未启用")
 
-    hits, indexed = rank_logs(db, vec, limit=limit, min_score=min_score)
+    hits, indexed = rank_logs(db, vec, limit=limit, min_score=min_score, category_id=category_id)
 
     items = []
     if hits:
@@ -76,5 +75,18 @@ def search_by_image(
             if image is None:
                 continue
             items.append({"log": log, "score": round(hit.score, 4), "matched_image": image})
+    return items, indexed
 
+
+# 同步函数：FastAPI 会放到线程池里跑，几秒的推理不会卡住事件循环
+@router.post("/api/search/image", response_model=ImageSearchOut)
+def search_by_image(
+    file: UploadFile = File(...),
+    limit: int = Query(20, ge=1, le=50),
+    # 评测脚本传 -1 取回全部分数；前端不传
+    min_score: float = Query(MIN_SCORE, ge=-1.0, le=1.0),
+    db: sqlite3.Connection = Depends(get_db),
+    user_id: int = Depends(current_user_id),
+):
+    items, indexed = run_image_search(db, file, limit, min_score)
     return {"items": items, "indexed": indexed, "pending": indexer.count_pending(db, user_id)}

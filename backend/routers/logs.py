@@ -77,18 +77,21 @@ def _apply_field_values(db, log_id: int, category_id: int, values: dict):
         raise HTTPException(400, str(exc))
 
 
-@router.get("", response_model=LogListOut)
-def list_logs(
+def query_logs(
+    db: sqlite3.Connection,
+    *,
+    scope_where=(),
+    scope_params=(),
     search: Optional[str] = None,
     category_id: Optional[int] = None,
     status: Optional[str] = None,
-    fv: list[str] = Query(default=[]),
+    fv=(),
     sort: Optional[str] = None,
     page: int = 1,
     size: int = 20,
-    db: sqlite3.Connection = Depends(get_db),
-):
-    where, params = ["l.deleted_at IS NULL"], []
+) -> dict:
+    """列表查询。scope_where/scope_params 由分享接口传入，与筛选条件 AND。"""
+    where, params = ["l.deleted_at IS NULL", *scope_where], list(scope_params)
     if search:
         where.append("l.description LIKE ?")
         params.append(f"%{search}%")
@@ -119,6 +122,23 @@ def list_logs(
 
     items = _build_log_list(db, rows)
     return {"items": items, "total": total, "page": page, "size": size}
+
+
+@router.get("", response_model=LogListOut)
+def list_logs(
+    search: Optional[str] = None,
+    category_id: Optional[int] = None,
+    status: Optional[str] = None,
+    fv: list[str] = Query(default=[]),
+    sort: Optional[str] = None,
+    page: int = 1,
+    size: int = 20,
+    db: sqlite3.Connection = Depends(get_db),
+):
+    return query_logs(
+        db, search=search, category_id=category_id, status=status,
+        fv=fv, sort=sort, page=page, size=size,
+    )
 
 
 @router.post("", response_model=LogOut, status_code=201)

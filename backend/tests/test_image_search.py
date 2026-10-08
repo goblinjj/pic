@@ -248,3 +248,19 @@ def test_oversized_upload_returns_413(client, fake_embedder):
     resp = search(client, b"\xff" * (search_router.MAX_QUERY_BYTES + 1))
     assert resp.status_code == 413
     assert resp.json()["detail"] == "图片文件过大"
+
+
+def test_rank_logs_category_filter(client, gallery, db_conn):
+    from image_search import rank_logs
+
+    other = client.post("/api/categories", json={"name": "帽子"}).json()["id"]
+    red_hat = make_log(client, other, "红帽子", png("h.png", RED))
+    assert indexer.process_pending() == 1
+
+    vec = mean_color_vector(Image.new("RGB", (8, 8), RED))
+    all_hits, _ = rank_logs(db_conn, vec, limit=10)
+    assert red_hat["id"] in [h.log_id for h in all_hits]
+
+    hits, indexed = rank_logs(db_conn, vec, limit=10, category_id=other)
+    assert [h.log_id for h in hits] == [red_hat["id"]]
+    assert indexed == 1
