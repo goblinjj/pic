@@ -121,10 +121,10 @@ def scope_clause(scope) -> tuple[list[str], list]:
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/info` | `{scope: "account" \| "category", category_name, owner}`；`owner` 为用户名，用于页面标题「xx 分享的…」 |
+| GET | `/info` | `{scope: "account" \| "category", category_id, category_name, owner}`；`owner` 为用户名，用于页面标题「xx 分享的…」；`category_id` 供前端锁定分类筛选 |
 | GET | `/categories` | 账号级：全部分类；分类级：只返回该分类 |
 | GET | `/categories/{cid}/fields` | 字段与选项，用于筛选和排序。分类级分享下 `cid` 不等于分享的分类 → 404 |
-| GET | `/logs` | 参数与 `/api/logs` 相同（`search, category_id, status, fv, sort, page, size`）。分类级分享下传入其他 `category_id` 得到空列表（范围条件与之 AND） |
+| GET | `/logs` | 参数与 `/api/logs` 相同（`search, category_id, status, fv, sort, page, size`），另限制 `page ≥ 1`、`1 ≤ size ≤ 100`，越界 422（匿名接口不能一次拉全库）。分类级分享下传入其他 `category_id` 得到空列表（范围条件与之 AND） |
 | GET | `/logs/{log_id}` | 详情；不在范围内 → 404 |
 | GET | `/files/{filename}`、`/files/thumbs/{filename}` | 文件名须登记在 images 表，**且**所属日志满足范围条件（未删除、分类匹配） |
 | POST | `/search/image` | 以图搜图，结果限定在范围内；按 IP 限流 |
