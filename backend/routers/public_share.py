@@ -5,7 +5,6 @@
 分类级分享才不会退化成整个账号。
 """
 import os
-import sqlite3
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -71,7 +70,7 @@ def list_logs(
     fv: list[str] = Query(default=[]),
     sort: Optional[str] = None,
     # 匿名接口：不允许一次拉全库，也不允许负 offset
-    page: int = Query(1, ge=1),
+    page: int = Query(1, ge=1, le=1_000_000),
     size: int = Query(20, ge=1, le=100),
     scope: ShareScope = Depends(share_scope),
 ):

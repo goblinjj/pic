@@ -1,9 +1,13 @@
 """访客侧分享接口：不登录能读，且严格限定在分享范围内。"""
+import os
+
 import pytest
 from fastapi.testclient import TestClient
 
 import accounts
 import indexer
+import storage
+import thumbnail
 from main import app
 from tests.helpers import BLUE, RED, solid_image_bytes
 
@@ -167,8 +171,19 @@ def test_category_gone_404(client, visitor):
     conn.execute("INSERT INTO shares (token, user_id, category_id) VALUES (?, 1, ?)", (token, cid + 50))
     conn.commit()
     conn.close()
-    assert visitor.get(f"{base}/info").status_code == 404
-    assert visitor.get(f"{base}/logs").status_code == 404
+    _assert_all_404([visitor.get(f"{base}/info"), visitor.get(f"{base}/logs")])
+
+
+def test_missing_db_file_404(client, data, visitor):
+    base = _share(client)
+    path = storage.user_db_path(1)
+    moved = path + ".moved"
+    os.rename(path, moved)
+    try:
+        _assert_all_404([visitor.get(f"{base}/info")])
+    finally:
+        os.rename(moved, path)
+    assert visitor.get(f"{base}/info").status_code == 200
 
 
 # ------------------------------------------------------------------ 越权与边界
@@ -196,9 +211,31 @@ def test_other_account_cookie_does_not_matter(client, data, make_user):
 
 def test_file_path_traversal_404(client, data, visitor):
     base = _share(client)
+    # 带 %2F 的名字在路由层就被拒；只有 %2E%2E 会真正进到处理函数
     for name in ("..%2F..%2Fdata%2Fusers%2F1%2Fpiclog.db", "..%2Fpiclog.db", "%2E%2E"):
         assert visitor.get(f"{base}/files/{name}").status_code == 404
         assert visitor.get(f"{base}/files/thumbs/{name}").status_code == 404
+    assert visitor.get(f"{base}/files/%2E%2E").json()["detail"] == "File not found"
+    assert visitor.get(f"{base}/files/thumbs/%2E%2E").json()["detail"] == "File not found"
+
+
+def test_unregistered_file_404(client, data, visitor):
+    base = _share(client)
+    upload_dir = storage.user_upload_dir(1)
+    thumbs = thumbnail.thumb_dir(upload_dir)
+    os.makedirs(thumbs, exist_ok=True)
+    for d in (upload_dir, thumbs):
+        with open(os.path.join(d, "stray.png"), "wb") as f:
+            f.write(solid_image_bytes(RED))
+    try:
+        for url in (f"{base}/files/stray.png", f"{base}/files/thumbs/stray.png"):
+            r = visitor.get(url)
+            assert r.status_code == 404 and r.json()["detail"] == "File not found"
+        # 对照：登记过的文件仍可读
+        assert visitor.get(f"{base}/files/{_fname(data['g1'])}").status_code == 200
+    finally:
+        for d in (upload_dir, thumbs):
+            os.remove(os.path.join(d, "stray.png"))
 
 
 def test_logs_page_and_size_bounds(client, data, visitor):
@@ -206,6 +243,7 @@ def test_logs_page_and_size_bounds(client, data, visitor):
     assert visitor.get(f"{base}/logs", params={"size": 101}).status_code == 422
     assert visitor.get(f"{base}/logs", params={"size": 0}).status_code == 422
     assert visitor.get(f"{base}/logs", params={"page": 0}).status_code == 422
+    assert visitor.get(f"{base}/logs", params={"page": 10**18}).status_code == 422
     assert visitor.get(f"{base}/logs", params={"size": 100}).status_code == 200
 
 
