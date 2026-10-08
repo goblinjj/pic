@@ -115,6 +115,17 @@ def init_schema(conn: sqlite3.Connection):
             key   TEXT PRIMARY KEY,
             value TEXT NOT NULL
         );
+
+        -- 只读分享链接。token 明文存：用户要在「我的分享」里随时复制已有链接；
+        -- 能读到本库的人本来就能读到同目录下所有账号的库，哈希不多保护什么
+        CREATE TABLE IF NOT EXISTS shares (
+            token       TEXT PRIMARY KEY,
+            user_id     INTEGER NOT NULL,
+            category_id INTEGER,          -- NULL = 整个账号；指向该账号自己库里的分类，跨库无外键
+            created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_shares_user ON shares(user_id);
     """)
     conn.commit()
 
@@ -296,3 +307,59 @@ def set_meta(conn, key: str, value: str):
         (key, value),
     )
     conn.commit()
+
+
+# ------------------------------------------------------------------ 分享
+
+_SHARE_COLUMNS = "token, user_id, category_id, created_at"
+
+
+def create_share(conn, user_id: int, category_id: Optional[int]) -> str:
+    token = secrets.token_urlsafe(24)
+    conn.execute(
+        "INSERT INTO shares (token, user_id, category_id) VALUES (?, ?, ?)",
+        (token, user_id, category_id),
+    )
+    conn.commit()
+    return token
+
+
+def get_share(conn, user_id: int, token: str) -> Optional[sqlite3.Row]:
+    return conn.execute(
+        f"SELECT {_SHARE_COLUMNS} FROM shares WHERE token = ? AND user_id = ?",
+        (token, user_id),
+    ).fetchone()
+
+
+def list_shares(conn, user_id: int) -> list[sqlite3.Row]:
+    # created_at 只精确到秒，同一秒建的按插入顺序
+    return conn.execute(
+        f"SELECT {_SHARE_COLUMNS} FROM shares WHERE user_id = ? "
+        "ORDER BY created_at DESC, rowid DESC",
+        (user_id,),
+    ).fetchall()
+
+
+def delete_share(conn, user_id: int, token: str) -> bool:
+    cur = conn.execute("DELETE FROM shares WHERE token = ? AND user_id = ?", (token, user_id))
+    conn.commit()
+    return cur.rowcount > 0
+
+
+def delete_shares_for_category(conn, user_id: int, category_id: int):
+    conn.execute(
+        "DELETE FROM shares WHERE user_id = ? AND category_id = ?", (user_id, category_id)
+    )
+    conn.commit()
+
+
+def resolve_share(conn, token: str) -> Optional[sqlite3.Row]:
+    """访客打开链接时用：账号停用的分享视为无效（不删，重新启用后恢复）。"""
+    if not token:
+        return None
+    return conn.execute(
+        "SELECT s.token, s.user_id, s.category_id, u.username "
+        "FROM shares s JOIN users u ON u.id = s.user_id "
+        "WHERE s.token = ? AND u.is_active = 1",
+        (token,),
+    ).fetchone()

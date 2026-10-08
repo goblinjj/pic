@@ -184,3 +184,57 @@ def test_meta(conn):
     accounts.set_meta(conn, "k", "1")
     accounts.set_meta(conn, "k", "2")
     assert accounts.get_meta(conn, "k") == "2"
+
+# ------------------------------------------------------------------ 分享
+
+def test_share_create_list_resolve(conn):
+    uid = accounts.create_user(conn, "alice", "password-1")
+    t_all = accounts.create_share(conn, uid, None)
+    t_cat = accounts.create_share(conn, uid, 7)
+    assert t_all != t_cat and len(t_all) == 32
+
+    rows = accounts.list_shares(conn, uid)
+    # 新的在前
+    assert [r["token"] for r in rows] == [t_cat, t_all]
+    assert [r["category_id"] for r in rows] == [7, None]
+
+    hit = accounts.resolve_share(conn, t_cat)
+    assert (hit["user_id"], hit["category_id"], hit["username"]) == (uid, 7, "alice")
+    assert accounts.get_share(conn, uid, t_all)["category_id"] is None
+
+
+def test_share_resolve_unknown_or_empty(conn):
+    assert accounts.resolve_share(conn, "") is None
+    assert accounts.resolve_share(conn, "nope") is None
+
+
+def test_share_delete_only_own(conn):
+    a = accounts.create_user(conn, "alice", "password-1")
+    b = accounts.create_user(conn, "bob", "password-1")
+    token = accounts.create_share(conn, a, None)
+    assert accounts.delete_share(conn, b, token) is False
+    assert accounts.resolve_share(conn, token) is not None
+    assert accounts.get_share(conn, b, token) is None
+    assert accounts.delete_share(conn, a, token) is True
+    assert accounts.resolve_share(conn, token) is None
+
+
+def test_share_delete_for_category_scoped_to_user(conn):
+    a = accounts.create_user(conn, "alice", "password-1")
+    b = accounts.create_user(conn, "bob", "password-1")
+    ta = accounts.create_share(conn, a, 1)
+    tb = accounts.create_share(conn, b, 1)   # 各账号的分类 id 都从 1 开始
+    t_all = accounts.create_share(conn, a, None)
+    accounts.delete_shares_for_category(conn, a, 1)
+    assert accounts.resolve_share(conn, ta) is None
+    assert accounts.resolve_share(conn, tb) is not None
+    assert accounts.resolve_share(conn, t_all) is not None
+
+
+def test_share_inactive_user_not_resolved(conn):
+    uid = accounts.create_user(conn, "alice", "password-1")
+    token = accounts.create_share(conn, uid, None)
+    accounts.set_active(conn, uid, False)
+    assert accounts.resolve_share(conn, token) is None
+    accounts.set_active(conn, uid, True)
+    assert accounts.resolve_share(conn, token) is not None
