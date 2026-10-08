@@ -264,3 +264,41 @@ def test_no_write_methods(client, data, visitor):
         assert r.status_code in (404, 405), (r.request.method, r.request.url, r.status_code)
     log = client.get(f"/api/logs/{lid}").json()
     assert log["description"] == "红手套" and len(log["images"]) == 1
+
+# ------------------------------------------------------------------ 以图搜图
+
+def _search(c, base, color=RED):
+    return c.post(f"{base}/search/image",
+                  files={"file": ("q.png", solid_image_bytes(color), "image/png")})
+
+
+def test_image_search_confined_to_category(client, data, visitor, fake_embedder):
+    assert indexer.process_pending() == 3   # 已删除那条不建索引
+    base = _share(client, data["gloves"])
+    resp = _search(visitor, base)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    ids = [it["log"]["id"] for it in body["items"]]
+    assert ids == [data["g1"]["id"]]          # 红帽子在别的分类，不出现
+    assert body["pending"] == 0
+    assert body["indexed"] == 2
+
+
+def test_image_search_account_scope(client, data, visitor, fake_embedder):
+    indexer.process_pending()
+    base = _share(client)
+    ids = {it["log"]["id"] for it in _search(visitor, base).json()["items"]}
+    assert ids == {data["g1"]["id"], data["h1"]["id"]}
+
+
+def test_image_search_rate_limited(client, data, visitor, fake_embedder):
+    base = _share(client)
+    for _ in range(10):
+        assert _search(visitor, base).status_code == 200
+    resp = _search(visitor, base)
+    assert resp.status_code == 429
+    assert resp.json()["detail"] == "搜索太频繁，请稍后再试"
+
+
+def test_image_search_bad_token_404(visitor):
+    assert _search(visitor, "/api/share/nope").status_code == 404

@@ -7,15 +7,18 @@
 import os
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
 
+import ratelimit
 import thumbnail
-from deps import ShareScope, share_scope
-from models import CategoryFieldOut, CategoryOut, LogListOut, LogOut, ShareInfoOut
+from deps import ShareScope, client_ip, share_scope
+from image_search import MIN_SCORE
+from models import CategoryFieldOut, CategoryOut, ImageSearchOut, LogListOut, LogOut, ShareInfoOut
 from routers.fields import FIELD_COLUMNS, _field_row_to_dict
 from routers.files import CACHE_HEADERS
 from routers.logs import LOG_COLUMNS, _build_log, query_logs
+from routers.search import run_image_search
 
 router = APIRouter(prefix="/api/share/{token}", tags=["share"])
 
@@ -116,3 +119,23 @@ def get_thumbnail(filename: str, scope: ShareScope = Depends(share_scope)):
 @router.get("/files/{filename}")
 def get_original(filename: str, scope: ShareScope = Depends(share_scope)):
     return _serve(scope, scope.upload_dir, filename)
+
+
+# 推理要几秒 CPU，又不需要登录：按 IP 限频
+SEARCH_LIMIT = 10
+SEARCH_WINDOW_SECONDS = 60
+
+
+# 同步函数：FastAPI 放到线程池里跑，推理不卡事件循环
+@router.post("/search/image", response_model=ImageSearchOut)
+def search_by_image(
+    request: Request,
+    file: UploadFile = File(...),
+    limit: int = Query(20, ge=1, le=50),
+    scope: ShareScope = Depends(share_scope),
+):
+    if not ratelimit.hit(("share_search", client_ip(request)), SEARCH_LIMIT, SEARCH_WINDOW_SECONDS):
+        raise HTTPException(429, "搜索太频繁，请稍后再试")
+    items, indexed = run_image_search(scope.db, file, limit, MIN_SCORE, scope.category_id)
+    # 未建索引数对访客没有意义
+    return {"items": items, "indexed": indexed, "pending": 0}
