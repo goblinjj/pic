@@ -1,6 +1,6 @@
 <template>
   <div>
-    <PageHeader title="拍照搜索" back>
+    <PageHeader title="拍照搜索" back :on-back="goBack">
       <template #actions>
         <CameraSearchButton v-if="imageSearch.status !== 'idle'" variant="ghost" label="重新拍照" />
       </template>
@@ -97,6 +97,12 @@ import { useSource } from '../source.js'
 
 const source = useSource()
 const imageSearch = source.imageSearch.state
+const router = useRouter()
+// 直接打开或刷新本页时没有上一页，回退会跳出分享，改为回到列表
+function goBack() {
+  if (window.history.state?.back) router.back()
+  else router.replace({ name: source.routes.list, params: source.params })
+}
 const retry = () => source.imageSearch.retry()
 
 const errorMessage = computed(() =>
@@ -117,7 +123,7 @@ async function refreshHit(id) {
   }
 }
 
-const removeAfterEach = useRouter().afterEach((to, from, failure) => {
+const removeAfterEach = router.afterEach((to, from, failure) => {
   if (!failure && from.name === source.routes.imageSearchDetail && to.name === source.routes.imageSearch) {
     refreshHit(from.params.id)
   }

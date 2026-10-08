@@ -131,6 +131,8 @@ def _all_gets(visitor, base, data):
         visitor.get(f"{base}/logs/{data['g1']['id']}"),
         visitor.get(f"{base}/files/{f}"),
         visitor.get(f"{base}/files/thumbs/{f}"),
+        # 分享校验在嵌入模型检查之前，所以无需 fake_embedder 也应是统一的 404
+        _search(visitor, base),
     ]
 
 
@@ -161,7 +163,7 @@ def test_disabled_then_reenabled_account(client, data, visitor):
     assert visitor.get(f"{base}/logs").json()["total"] == 3
 
 
-def test_category_gone_404(client, visitor):
+def test_category_gone_404(client, data, visitor):
     cid = client.post("/api/categories", json={"name": "空"}).json()["id"]
     base = _share(client, cid)
     # 删分类本应连分享一起删；这里绕开它，模拟漏删的旧数据
@@ -171,7 +173,7 @@ def test_category_gone_404(client, visitor):
     conn.execute("INSERT INTO shares (token, user_id, category_id) VALUES (?, 1, ?)", (token, cid + 50))
     conn.commit()
     conn.close()
-    _assert_all_404([visitor.get(f"{base}/info"), visitor.get(f"{base}/logs")])
+    _assert_all_404(_all_gets(visitor, base, data))
 
 
 def test_missing_db_file_404(client, data, visitor):

@@ -80,8 +80,8 @@ def delete_category(
         raise HTTPException(400, "Category has logs, cannot delete")
     db.execute("DELETE FROM categories WHERE id = ?", (category_id,))
     db.commit()
-    # 以后新建的分类可能复用这个 id（SQLite 无 AUTOINCREMENT 时会复用最大值），
-    # 旧链接不能因此指向新分类
+    # 分类已删，指向它的分享也要一并清掉，否则会一直留在所有者的「我的分享」列表里，
+    # 点开永远是 404
     conn = accounts.connect()
     try:
         accounts.delete_shares_for_category(conn, user_id, category_id)

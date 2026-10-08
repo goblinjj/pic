@@ -63,7 +63,9 @@ const router = createRouter({
   routes,
   scrollBehavior(to, from, savedPosition) {
     // 列表和它上面的详情卡片之间切换不动滚动条，否则一开卡片列表就跳回顶部
-    if (to.matched[0] && to.matched[0] === from.matched[0]) return false
+    // （分享页最外层都是 ShareLayout，所以分享页比较 matched[1]，即真正的页面宿主）
+    const host = (r) => r.matched[r.meta.share ? 1 : 0]
+    if (host(to) && host(to) === host(from)) return false
     // 从编辑页等处返回列表时回到离开时的位置（列表被 keep-alive 缓存着，内容还在）
     return savedPosition || { top: 0 }
   },
