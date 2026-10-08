@@ -5,6 +5,8 @@
 """
 import logging
 import os
+import sqlite3
+from typing import NamedTuple, Optional
 from urllib.parse import unquote
 
 from fastapi import Depends, HTTPException, Request, Response
@@ -79,3 +81,55 @@ def get_db(user_id: int = Depends(current_user_id)):
 
 def get_upload_dir(user_id: int = Depends(current_user_id)) -> str:
     return storage.user_upload_dir(user_id)
+
+
+# ------------------------------------------------------------------ 只读分享
+
+SHARE_NOT_FOUND = "分享链接不存在或已失效"
+
+
+class ShareScope(NamedTuple):
+    user_id: int
+    username: str
+    category_id: Optional[int]   # None = 整个账号
+    category_name: str
+    db: sqlite3.Connection
+    upload_dir: str
+
+
+def share_scope(token: str):
+    """访客侧依赖：token → 账号库连接 + 范围。不读 Cookie，登录与否不影响结果。
+
+    所有失败一律同一个 404，不让访客分辨「不存在」「已撤销」「账号停用」。
+    """
+    conn = accounts.connect()
+    try:
+        share = accounts.resolve_share(conn, token)
+    finally:
+        conn.close()
+    if share is None:
+        raise HTTPException(404, SHARE_NOT_FOUND)
+    path = storage.user_db_path(share["user_id"])
+    if not os.path.isfile(path):
+        log.error("分享 %s… 指向的库不存在：%s", token[:6], path)
+        raise HTTPException(404, SHARE_NOT_FOUND)
+    db = database.connect(path)
+    try:
+        category_name = ""
+        if share["category_id"] is not None:
+            row = db.execute(
+                "SELECT name FROM categories WHERE id = ?", (share["category_id"],)
+            ).fetchone()
+            if row is None:
+                raise HTTPException(404, SHARE_NOT_FOUND)
+            category_name = row["name"]
+        yield ShareScope(
+            user_id=share["user_id"],
+            username=share["username"],
+            category_id=share["category_id"],
+            category_name=category_name,
+            db=db,
+            upload_dir=storage.user_upload_dir(share["user_id"]),
+        )
+    finally:
+        db.close()
